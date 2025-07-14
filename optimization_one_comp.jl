@@ -7,20 +7,30 @@ using StatsBase
 #warning: this version of the code is specific to the converter
 
 # compute value function
-function V(T,s,q_i,S,h,product,nb_state,P_w,P_m,Q,Vals,is_end_year)
+function V(T,s,q_i,S,h,product,nb_state,P_w,Q,Vals,is_end_year)
 
     x_0 = zeros(nb_state)      
     x_0[s] = 1 
 
     # maintenance duration depends on the state for the converter
-    d = max(s - 1,1)
+    d = max(s - 1,1) 
+
+    P_m = zeros(nb_state, nb_state)
+
+    #P_m is defined here because it depends on d
+    for i in 1:(d+1)
+        P_m[1,i] = 1.0 
+    end
+
+    for i in (d+2):(nb_state) #we do not have enough maintenance days to maintain everything
+        P_m[i-d,i] = 1.0 
+    end
 
     model = Model(Gurobi.Optimizer)
 
     @variable(model, 0 <= x[1:S,1:(T+1),1:nb_state] <= 1) # we need the value at T+1 to get next strategic period value function
 
     @variable(model, c[1:(T+1)] >= 0) # c[T+1] is the value function of the next strategic period
-    @variable(model, p_evac[1:S,1:T,1:nb_state] >= 0)
 
     @variable(model, m[1:T], Bin)
     @variable(model, u[1:S,1:T], Bin)
@@ -35,9 +45,10 @@ function V(T,s,q_i,S,h,product,nb_state,P_w,P_m,Q,Vals,is_end_year)
     M = 1e6  #Big M, could be changed to avoid numerical 
     alpha = 1 #multiplier for the code,could be increased to avoid numerical instability
 
+    margin = 5 #margin to avoid maintenance that we can't finish
+    @constraint(model, [t in 1:(d + margin)], m[T+1-t] == 0) 
 
-    @constraint(model, [t in 1:(d+5)], m[T+1-t] == 0) #avoid maintenances thatwe can't finish. 5 could be changed.
-
+    # we consider that components are refirbushed since the first day of maintenance (no influence on cost), and no failure can happend during maintenance
     @constraint(model, [s in 1:S, t in 2:(T+1), i in 1:nb_state], x[s,t,i] == (1-ong_m[s,t-1])*sum(P_w[i,j]*x[s,t-1,j] for j in 1:nb_state) + ong_m[s,t-1]*sum(P_m[i,j]*x[s,t-1,j] for j in 1:nb_state))
 
     @constraint(model, [s in 1:S, t in 1:(T)], sum(x[s,t,i] for i in 1:nb_state) == 1.0)
@@ -53,7 +64,7 @@ function V(T,s,q_i,S,h,product,nb_state,P_w,P_m,Q,Vals,is_end_year)
     @constraint(model, [s in 1:S, t in 1:(T)], ong_m[s,t] >= (1/T)*q[s,t])
     @constraint(model, [s in 1:S, t in 1:(T)], ong_m[s,t] <= q[s,t])
 
-    @constraint(model, [t in 1:T], c[t] >= (alpha/S)*sum((1 - ong_m[s,t])*x[s,t,nb_state]*product[s,t] + ong_m[s,t]*(1-k[t])*product[s,t] for s in 1:S))
+    @constraint(model, [t in 1:T], c[t] >= (alpha/S)*sum((1 - ong_m[s,t])*x[s,t,nb_state]*product[s,t] + ong_m[s,t]*(1-k[t])*product[s,t] for s in 1:S)) # capacity equals 0 in state 12, maximum value everywhere else
 
     @constraint(model, q_f == q_i - sum(k[t] for t in 1:T)) 
     @constraint(model, q_f >= 0) 
@@ -61,9 +72,11 @@ function V(T,s,q_i,S,h,product,nb_state,P_w,P_m,Q,Vals,is_end_year)
     # ensure delta as the right value
     @constraint(model, [j in 0:Q], q_f - j <=  M * (1 - δ[j]))
     @constraint(model, [j in 0:Q], q_f - j >= -M * (1 - δ[j]))
+    @constraint(model, sum(δ[j] for j in 0:Q) == 1)
 
     if is_end_year
         @constraint(model, [j in 0:Q], c[T+1] + M * (1 - δ[j]) >= (alpha/S)*sum(sum(x[s,T+1, i] * Vals[i, Q+1] for i in 1:nb_state) for s in 1:S)) #At year end, the quota resets
+    else
         @constraint(model, [j in 0:Q], c[T+1] + M * (1 - δ[j]) >= (alpha/S)*sum(sum(x[s,T+1, i] * Vals[i, j+1] for i in 1:nb_state) for s in 1:S))
     end
 
@@ -83,14 +96,16 @@ function V(T,s,q_i,S,h,product,nb_state,P_w,P_m,Q,Vals,is_end_year)
     m = [value(m[t]) for t in 1:T]
     k = [value(k[t]) for t in 1:T]
     #u = [value(u[s,t]) for  s in 1:S, t in 1:T]
-    #q = [value(q[s,t]) for  s in 1:S, t in 1:T]
+    q = [value(q[s,t]) for  s in 1:S, t in 1:T]
+    δ = [value(δ[j]) for j in 0:Q]
+
     #ong_m = [value(ong_m[s,t]) for  s in 1:S, t in 1:T]
     #x = [value(x[s,t,nb_state]) for  s in 1:S, t in 1:(T+1)]
     #c = [value(c[t]) for t in 1:T]
     #sum_m = sum(value(m[t]) for t in 1:T)
 
     if status == MOI.OPTIMAL
-        return(cost, m,k)
+        return(cost, m,k,q,δ)
     else
         println("Aucune solution optimale trouvée.")
     end    
@@ -117,9 +132,9 @@ function Bellman(years,Q,S,h,product,nb_state,P_w,P_m)
             for q in 0:Q
                 h_t = h[Tmax-t+1, :, :]  # taille (S, T)
                 T = 62 - count(==( -1 ), h_t[1,:]) # - 1 means ends of the month, so that we can represent months with variable lengths with vectors of the same dimensions
-                product_t = product[t, :, :]
+                product_t = product[Tmax-t+1, :, :]
                 is_end_year = t % 6 == 1
-                val, m_opt, k_opt = V(T,s,q,S,h_t,product_t,nb_state,P_w,P_m,Q,Vals_old,is_end_year)
+                val, m_opt, k_opt = V(T,s,q,S,h_t,product_t,nb_state,P_w,Q,Vals_old,is_end_year)
                 Vals_new[s, q+1] = val
                 Policies_m[s,q+1,Tmax - t + 1,1:T] = m_opt
                 Policies_k[s,q+1,Tmax - t + 1,1:T] = k_opt
@@ -244,14 +259,7 @@ end
 P_w[nb_state,nb_state] = 1.0
 
 
-P_m = zeros(nb_state, nb_state)
-
-for i in 1:(nb_state)
-    P_m[1,i] = 1.0 
-end
-
-
-years = 1
+years = 30
 
 #h = Array{Float64}(undef, 6*years, S, 62)
 #for t in 1:(6*years)
