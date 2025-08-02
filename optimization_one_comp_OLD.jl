@@ -3,67 +3,72 @@ using JuMP
 using Distributions
 using Random
 using StatsBase
-import MathOptInterface as MOI
 
+#warning: this version of the code is specific to the converter
 
 # compute value function
-function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
-
-    model = Model(Gurobi.Optimizer)
-    set_optimizer_attribute(model, "OutputFlag", 0)
+function V(T,s,q_i,S,h,product,nb_state,P_w,Q,Vals,is_end_year)
 
     x_0 = zeros(nb_state)      
     x_0[s] = 1 
+
+    # maintenance duration depends on the state for the converter
+    d = max(s - 1,1) 
+
+    P_m = zeros(nb_state, nb_state)
+
+    #P_m is defined here because it depends on d
+    for i in 1:(d+1)
+        P_m[1,i] = 1.0 
+    end
+
+    for i in (d+2):(nb_state) #we do not have enough maintenance days to maintain everything
+        P_m[i-d,i] = 1.0 
+    end
+
+    model = Model(Gurobi.Optimizer)
 
     @variable(model, 0 <= x[1:S,1:(T+1),1:nb_state] <= 1) # we need the value at T+1 to get next strategic period value function
 
     @variable(model, c[1:(T+1)] >= 0) # c[T+1] is the value function of the next strategic period
 
-    @variable(model, m[1:T, 1:nb_maint], Bin)
-    @variable(model, u[1:S,1:T, 1:(nb_maint-1)], Bin)
-    @variable(model, ong_m[1:S,1:T, 1:(nb_maint-1)], Bin) #ongoing maintenance 
-    # - 1 because last action means no maintenance 
-    @variable(model, q[1:S,1:T,1:(nb_maint-1)] >= 0) #nb remaining maintenance days 
+    @variable(model, m[1:T], Bin)
+    @variable(model, u[1:S,1:T], Bin)
+    @variable(model, ong_m[1:S,1:T], Bin) #ongoing maintenance
+    @variable(model, q[1:S,1:T] >= 0)
     @variable(model, k[1:T], Bin)
-    @variable(model, maintenance[1:S,1:T], Bin) #equals 1 if maintenance
     @variable(model, q_f, Int)
     @variable(model, δ[0:Q], Bin) # value of quota as the end of the period formulated using Bin. Usefull to write final cost.    
-
 
     @objective(model, Min, sum(c[t] for t in 1:(T+1)))
 
     M = 1e6  #Big M, could be changed to avoid numerical 
     alpha = 1 #multiplier for the code,could be increased to avoid numerical instability
 
-    margin = 15 #margin to avoid maintenance that we can't finish
-    @constraint(model, [t in 1:margin, maint in 1:nb_maint], m[T+1-t, maint] == 0) 
+    margin = 5 #margin to avoid maintenance that we can't finish
+    @constraint(model, [t in 1:(d + margin)], m[T+1-t] == 0) 
 
     # we consider that components are refirbushed since the first day of maintenance (no influence on cost), and no failure can happend during maintenance
-    @constraint(model, [s in 1:S, t in 2:(T+1), i in 1:nb_state], x[s,t,i] == sum(ong_m[s,t-1,maint]*sum(P[i,j,maint]*x[s,t-1,j] for j in 1:nb_state) for maint in 1:(nb_maint-1)) + (1 - maintenance[s,t-1])*sum(P[i,j,nb_maint]*x[s,t-1,j] for j in 1:nb_state))
+    @constraint(model, [s in 1:S, t in 2:(T+1), i in 1:nb_state], x[s,t,i] == (1-ong_m[s,t-1])*sum(P_w[i,j]*x[s,t-1,j] for j in 1:nb_state) + ong_m[s,t-1]*sum(P_m[i,j]*x[s,t-1,j] for j in 1:nb_state))
 
     #@constraint(model, [s in 1:S, t in 1:(T)], sum(x[s,t,i] for i in 1:nb_state) == 1.0)
     @constraint(model, [s in 1:S, i in 1:nb_state], x[s,1,i] == x_0[i])
 
-    @constraint(model, sum(m[t,maint] for t in 1:T, maint in 1:(nb_maint - 1)) <= 1) #maximum one maintenance for the strategic period 
-    @constraint(model, [t in 1:T], sum(m[t,maint] for maint in 1:nb_maint) == 1)
-    # the last maintenance action is no maintenance
+    @constraint(model, sum(m[t] for t in 1:T) <= 1) #maximum one maintenance for the strategic period 
     # PROBLEM: this contraint together with sum x = 1 leads to infeasibility (sometimes we want two maintenances a month...)
 
     # deterministic rule: "maintain as soon as possible"
-    @constraint(model, [s in 1:S, i in 1:nb_state, maint in 1:(nb_maint-1)], q[s,1,maint] == d[maint]*m[1,maint])
-    @constraint(model, [s in 1:S, t in 1:(T-1), maint in 1:(nb_maint-1)], q[s,t+1,maint] == q[s,t, maint] - u[s,t,maint] + d[maint]*m[t+1,maint])
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], u[s,t,maint] + 1 - h[s,t] >= (1/T)*q[s,t, maint])
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], u[s,t,maint] <= q[s,t, maint])
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], u[s,t,maint] <= h[s,t])
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], ong_m[s,t,maint] >= (1/T)*q[s,t,maint])
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], ong_m[s,t] <= q[s,t,maint])
-    @constraint(model, [s in 1:S, t in 1:T], maintenance[s,t] == sum(ong_m[s,t,maint] for maint in 1:(nb_maint - 1)))
+    @constraint(model, [s in 1:S, i in 1:nb_state], q[s,1] == d*m[1])
+    @constraint(model, [s in 1:S, t in 1:(T-1)], q[s,t+1] == q[s,t] - u[s,t] + d*m[t+1])
 
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], u[s,t,maint] <= sum(m[t_prime,maint] for t_prime in 1:t)) #not necessary, could help reduce computing time
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], ong_m[s,t,maint] <= sum(m[t_prime,maint] for t_prime in 1:t)) #not necessary, could help reduce computing time
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], q[s,t,maint] <= sum(m[t_prime,maint] for t_prime in 1:t)) #not necessary, could help reduce computing time
+    @constraint(model, [s in 1:S, t in 1:(T)], u[s,t] + 1 - h[s,t] >= (1/T)*q[s,t])
+    @constraint(model, [s in 1:S, t in 1:(T)], u[s,t] <= q[s,t])
+    @constraint(model, [s in 1:S, t in 1:(T)], u[s,t] <= h[s,t])
 
-    @constraint(model, [t in 1:T], c[t] >= (alpha/S)*sum((1 - maintenance[s,t])*sum(x[s,t,state]*P_evac[state] for state in 1:nb_state) + maintenance[s,t]*(1-k[t])*100 for s in 1:S)) # capacity equals 0 in state 12, maximum value everywhere else
+    @constraint(model, [s in 1:S, t in 1:(T)], ong_m[s,t] >= (1/T)*q[s,t])
+    @constraint(model, [s in 1:S, t in 1:(T)], ong_m[s,t] <= q[s,t])
+
+    @constraint(model, [t in 1:T], c[t] >= (alpha/S)*sum((1 - ong_m[s,t])*x[s,t,nb_state]*product[s,t] + ong_m[s,t]*(1-k[t])*product[s,t] for s in 1:S)) # capacity equals 0 in state 12, maximum value everywhere else
 
     @constraint(model, q_f == q_i - sum(k[t] for t in 1:T)) 
     @constraint(model, q_f >= 0) 
@@ -73,20 +78,29 @@ function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
     @constraint(model, [j in 0:Q], q_f - j >= -M * (1 - δ[j]))
     @constraint(model, sum(δ[j] for j in 0:Q) == 1)
 
-    @constraint(model, [j in 0:Q], c[T+1] + M * (1 - δ[j]) >= (alpha/S)*sum(sum(x[s,T+1, i] * Vals[i, j+1] for i in 1:nb_state) for s in 1:S))
+    if is_end_year
+        @constraint(model, [j in 0:Q], c[T+1] + M * (1 - δ[j]) >= (alpha/S)*sum(sum(x[s,T+1, i] * Vals[i, Q+1] for i in 1:nb_state) for s in 1:S)) #At year end, the quota resets
+    else
+        @constraint(model, [j in 0:Q], c[T+1] + M * (1 - δ[j]) >= (alpha/S)*sum(sum(x[s,T+1, i] * Vals[i, j+1] for i in 1:nb_state) for s in 1:S))
+    end
+
 
     optimize!(model)
 
     status = termination_status(model)
-    # println("Statut de l'optimisation: $status")
+    println("Statut de l'optimisation: $status")
 
     cost = objective_value(model)
 
 
-    m = [value(m[t, maint in 1:nb_maint]) for t in 1:T, maint in 1:nb_maint]
+    #numvars = MOI.get(model, Gurobi.ModelAttribute("NumVars"))
+    #numcons = MOI.get(model, Gurobi.ModelAttribute("NumConstrs"))
+
+
+    m = [value(m[t]) for t in 1:T]
     k = [value(k[t]) for t in 1:T]
     #u = [value(u[s,t]) for  s in 1:S, t in 1:T]
-    q = [value(q[s,t,maint in 1:nb_maint]) for  s in 1:S, t in 1:T, maint in 1:nb_maint]
+    q = [value(q[s,t]) for  s in 1:S, t in 1:T]
     δ = [value(δ[j]) for j in 0:Q]
 
     #ong_m = [value(ong_m[s,t]) for  s in 1:S, t in 1:T]
@@ -103,7 +117,7 @@ function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
 end
 
 
-function Bellman(years,Q,S,h,nb_state,P)
+function Bellman(years,Q,S,h,product,nb_state,P_w)
 
     Tmax = 6*years
 
@@ -122,7 +136,10 @@ function Bellman(years,Q,S,h,nb_state,P)
             for q in 0:Q
                 h_t = h[Tmax-t+1, :, :]  # taille (S, T)
                 T = 62 - count(==( -1 ), h_t[1,:]) # - 1 means ends of the month, so that we can represent months with variable lengths with vectors of the same dimensions
-                val, m_opt, k_opt = V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
+                product_t = product[Tmax-t+1, :, :]
+                is_end_year = t % 6 == 1
+                println(T,s,q)
+                val, m_opt, k_opt = V(T,s,q,S,h_t,product_t,nb_state,P_w,Q,Vals_old,is_end_year)
                 Vals_new[s, q+1] = val
                 Policies_m[s,q+1,Tmax - t + 1,1:T] = m_opt
                 Policies_k[s,q+1,Tmax - t + 1,1:T] = k_opt
@@ -220,17 +237,32 @@ end
 
 #parameters
 
+p = 5.591277606933184e-5 # value for converter (see build_MC_converter.jl)
+nb_state = 12
+
 Q = 12 # quota of free maintenance days for each year 
 
 S = 3
 
 # random production scenario used for testing 
+product_month = [100 for s in 1:S, t in 1:60]
 colonnes_neg1 = fill(-1, S, 2)  # 2 months of 30 days
+product_month = hcat(product_month, colonnes_neg1)
 
 #random wave height, accessible with proba 0.9
-dist = Bernoulli(0.9)
-h_month = [Int(rand(dist)) for s in 1:S, t in 1:60]
+d = Bernoulli(0.9)
+h_month = [Int(rand(d)) for s in 1:S, t in 1:60]
 h_month = hcat(h_month, colonnes_neg1)
+
+P_w = zeros(nb_state, nb_state)
+
+for i in 1:(nb_state - 1)
+    P_w[i,i] = 1.0 - p 
+    P_w[i+1,i] = p
+end
+
+P_w[nb_state,nb_state] = 1.0
+
 
 years = 1
 

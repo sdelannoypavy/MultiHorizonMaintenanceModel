@@ -1,6 +1,6 @@
 MTBF = 588
 
-psim = (12/MTBF)/365 #gives a rough estimatin of p_i i+1
+p = (12/MTBF)/365 #gives a rough estimatin of p_i i+1
 
 function proba(p,i,j)
     # j > i
@@ -33,11 +33,32 @@ function compute_MTBF(p)
 
 end
 
-P = vcat([100.0 for i in 1:11], [0.0]) # vector of capacity levels
+
+nb_state = 12
+nb_maint = 2
+
+
+
+P_evac = vcat([100.0 for i in 1:11], [0.0]) # vector of capacity levels
 
 # using dichotomy we see that we get the MTBF for p = 1.1341906625663963e-5
 # binomial(1677, 8) overflows so we can't compute proba_i,i+n with n = 8. This is ok because this probability is very small, so we can neglect it. 
 # proba(p,1,3) is 100 times smaller than proba(1,2)
 # proba(p,1,2) is very close to proba(11,12)
 
-#CCl: we take p(i,i+1) = psim for each i, p(i,j) = 0 if j > i+1
+#CCl: we take p(i,i+1) = p for each i, p(i,j) = 0 if j > i+1
+
+P = zeros(nb_state, nb_state, nb_maint)
+
+for i in 1:nb_state
+    P[1,i,nb_maint, 1] = 1.0 
+end
+    
+for i in 1:(nb_state - 1)
+    P[i,i,2] = 1.0 - p 
+    P[i+1,i,2] = p
+end
+    
+P[nb_state,nb_state,2] = 1.0
+
+d = [11] # length of maintenance does not depend on state 
