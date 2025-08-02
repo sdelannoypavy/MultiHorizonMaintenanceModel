@@ -51,7 +51,7 @@ P_evac = vcat([100.0 for i in 1:11], [0.0]) # vector of capacity levels
 P = zeros(nb_state, nb_state, nb_maint)
 
 for i in 1:nb_state
-    P[1,i,nb_maint, 1] = 1.0 
+    P[1,i,1] = 1.0 
 end
     
 for i in 1:(nb_state - 1)
@@ -61,4 +61,4 @@ end
     
 P[nb_state,nb_state,2] = 1.0
 
-d = [11] # length of maintenance does not depend on state 
+d = [11,0] # length of maintenance does not depend on state 

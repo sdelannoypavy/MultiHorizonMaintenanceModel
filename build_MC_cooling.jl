@@ -7,13 +7,13 @@ nb_state_water = 3 #could be more
 MTBF_water = MTBF_tot # could be something else
 p_water = (2/MTBF_water)/365 
 P_water = [1 - p_water  0                 0
-           p_water      1                 0
-           0            p_water           0]
+           p_water      1 - p_water       0
+           0            p_water           1]
 
 p_pump = 9.55e-5 # gives MTBF_pump around 43
 P_pump = [1 - 2*p_pump*(1- p_pump)  0                 0
-          2*p_pump*(1- p_pump)      1                 0
-          0                         p_pump            0]
+          2*p_pump*(1- p_pump)      1 - p_pump        0
+          0                         p_pump            1]
 
 MTBF_pump = ((1/(2*p_pump*(1- p_pump))) + 1/p_pump)/365
 
@@ -94,7 +94,8 @@ for state_water in 1:nb_state_water
     end
 end
 
-d = [1 for i in 1:7] # we need two days to change the 2 pumps, but for now we assume that every maintenance takes 1 day
+d =  vcat([1 for i in 1:7], [0]) # we need two days to change the 2 pumps, but for now we assume that every maintenance takes 1 day
+
 
 P = repeat(P_no_maintenance, 1, 1, nb_maint)
 
@@ -123,4 +124,32 @@ for m_water in 0:1 # 0 means do maintenance
 end
 
 
+# tests
+
+
+@assert all(x -> x <= 1, P)
+
+tol = 1e-6  
+@assert all(abs(sum(P[i, j, maint] for i in 1:nb_state) - 1) ≤ tol
+            for j in 1:nb_state, maint in 1:nb_maint)
+
+@assert all(abs(sum(P_water[i, j] for i in 1:nb_state_water) - 1) ≤ tol
+        for j in 1:3)
+
+@assert all(abs(sum(P_water[i, j] for i in 1:3) - 1) ≤ tol
+        for j in 1:3)
+
+@assert all(abs(sum(P_fan[i, j] for i in 1:8) - 1) ≤ tol
+        for j in 1:3)
+
+function test_sums()
+    for i in axes(P, 2)
+        for j in axes(P, 3)
+            s = sum(P[n, i, j] for n in axes(P, 1))
+            if abs(s - 1) > tol
+                println("⚠️  Somme incorrecte pour i = $i, j = $j : somme = $s")
+            end
+        end
+    end
+end
 

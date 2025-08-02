@@ -33,7 +33,7 @@ function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
     @objective(model, Min, sum(c[t] for t in 1:(T+1)))
 
     M = 1e6  #Big M, could be changed to avoid numerical 
-    alpha = 1 #multiplier for the code,could be increased to avoid numerical instability
+    alpha = 1 #multiplier for the cost,could be increased to avoid numerical instability
 
     margin = 15 #margin to avoid maintenance that we can't finish
     @constraint(model, [t in 1:margin], m[T+1-t] == 0) 
@@ -47,6 +47,8 @@ function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
 
     #@constraint(model, [s in 1:S, t in 1:(T)], sum(x[s,t,i] for i in 1:nb_state) == 1.0)
     @constraint(model, [s in 1:S, i in 1:nb_state], x[s,1,i] == x_0[i])
+
+    #@constraint(model, [s in 1:S, t in 1:(T+1)], sum(x[s,t,j] for j in 1:nb_state) == 1)
 
     @constraint(model, sum(m[t] for t in 1:T) <= 1) #maximum one maintenance for the strategic period 
     # PROBLEM: this contraint together with sum x = 1 leads to infeasibility (sometimes we want two maintenances a month...)
@@ -97,7 +99,7 @@ function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
     #sum_m = sum(value(m[t]) for t in 1:T)
 
     if status == MOI.OPTIMAL
-        return(cost, m, m_type, k,q,δ,x,c,ong_m)
+        return(cost, m, k)
     else
         println("Aucune solution optimale trouvée.")
     end    
@@ -124,7 +126,7 @@ function Bellman(years,Q,S,h,nb_state,P)
             for q in 0:Q
                 h_t = h[Tmax-t+1, :, :]  # taille (S, T)
                 T = 62 - count(==( -1 ), h_t[1,:]) # - 1 means ends of the month, so that we can represent months with variable lengths with vectors of the same dimensions
-                val, m_opt, k_opt = V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
+                val, m_opt, k_opt = V(T,nb_maint,s,q,S,h_t,nb_state,P,Q,Vals_old,d,P_evac)
                 Vals_new[s, q+1] = val
                 Policies_m[s,q+1,Tmax - t + 1,1:T] = m_opt
                 Policies_k[s,q+1,Tmax - t + 1,1:T] = k_opt
@@ -247,7 +249,7 @@ years = 1
 #end
 
 
-#Vals_all, Policies_m, Policies_k = Bellman(years,Q,S,h,product,nb_state,P_w)
+#Vals_all, Policies_m, Policies_k = Bellman(years,Q,S,h,nb_state,P)
 #state_list = simulate(Policies_m,Policies_k,h,nb_state, years,Q)
 
 #@save "Vals_converter_120725.jld2" Vals_all
