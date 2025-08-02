@@ -3,7 +3,7 @@ using JuMP
 using Distributions
 using Random
 using StatsBase
-import MathOptInterface as MOI
+#import MathOptInterface as MOI
 
 
 # compute value function
@@ -19,16 +19,16 @@ function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
 
     @variable(model, c[1:(T+1)] >= 0) # c[T+1] is the value function of the next strategic period
 
-    @variable(model, m[1:T, 1:nb_maint], Bin)
-    @variable(model, u[1:S,1:T, 1:(nb_maint-1)], Bin)
-    @variable(model, ong_m[1:S,1:T, 1:(nb_maint-1)], Bin) #ongoing maintenance 
-    # - 1 because last action means no maintenance 
-    @variable(model, q[1:S,1:T,1:(nb_maint-1)] >= 0) #nb remaining maintenance days 
+    @variable(model, m[1:T], Bin)
+    @variable(model, m_type[1:nb_maint], Bin)
+    @variable(model, u[1:S,1:T], Bin)
+    @variable(model, ong_m[1:S,1:T], Bin) #ongoing maintenance
+    @variable(model, q[1:S,1:T] >= 0)
     @variable(model, k[1:T], Bin)
-    @variable(model, maintenance[1:S,1:T], Bin) #equals 1 if maintenance
     @variable(model, q_f, Int)
     @variable(model, δ[0:Q], Bin) # value of quota as the end of the period formulated using Bin. Usefull to write final cost.    
-
+    @variable(model, P_m[1:nb_state, 1:nb_state] >=0)
+    @variable(model, d_m >=0)
 
     @objective(model, Min, sum(c[t] for t in 1:(T+1)))
 
@@ -36,34 +36,34 @@ function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
     alpha = 1 #multiplier for the code,could be increased to avoid numerical instability
 
     margin = 15 #margin to avoid maintenance that we can't finish
-    @constraint(model, [t in 1:margin, maint in 1:nb_maint], m[T+1-t, maint] == 0) 
+    @constraint(model, [t in 1:margin], m[T+1-t] == 0) 
+
+    @constraint(model, sum(m_type[maint] for maint in 1:nb_maint) == 1)
+    @constraint(model, sum(m[t] for t in 1:T) <= 1)
+    @constraint(model, [i in 1:nb_state, j in 1:nb_state], P_m[i,j] == sum(m_type[maint]*P[i,j,maint] for maint in 1:nb_maint))
 
     # we consider that components are refirbushed since the first day of maintenance (no influence on cost), and no failure can happend during maintenance
-    @constraint(model, [s in 1:S, t in 2:(T+1), i in 1:nb_state], x[s,t,i] == sum(ong_m[s,t-1,maint]*sum(P[i,j,maint]*x[s,t-1,j] for j in 1:nb_state) for maint in 1:(nb_maint-1)) + (1 - maintenance[s,t-1])*sum(P[i,j,nb_maint]*x[s,t-1,j] for j in 1:nb_state))
+    @constraint(model, [s in 1:S, t in 2:(T+1), i in 1:nb_state], x[s,t,i] == (1-ong_m[s,t-1])*sum(P[i,j,nb_maint]*x[s,t-1,j] for j in 1:nb_state) + ong_m[s,t-1]*sum(P_m[i,j]*x[s,t-1,j] for j in 1:nb_state))
 
     #@constraint(model, [s in 1:S, t in 1:(T)], sum(x[s,t,i] for i in 1:nb_state) == 1.0)
     @constraint(model, [s in 1:S, i in 1:nb_state], x[s,1,i] == x_0[i])
 
-    @constraint(model, sum(m[t,maint] for t in 1:T, maint in 1:(nb_maint - 1)) <= 1) #maximum one maintenance for the strategic period 
-    @constraint(model, [t in 1:T], sum(m[t,maint] for maint in 1:nb_maint) == 1)
-    # the last maintenance action is no maintenance
+    @constraint(model, sum(m[t] for t in 1:T) <= 1) #maximum one maintenance for the strategic period 
     # PROBLEM: this contraint together with sum x = 1 leads to infeasibility (sometimes we want two maintenances a month...)
 
     # deterministic rule: "maintain as soon as possible"
-    @constraint(model, [s in 1:S, i in 1:nb_state, maint in 1:(nb_maint-1)], q[s,1,maint] == d[maint]*m[1,maint])
-    @constraint(model, [s in 1:S, t in 1:(T-1), maint in 1:(nb_maint-1)], q[s,t+1,maint] == q[s,t, maint] - u[s,t,maint] + d[maint]*m[t+1,maint])
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], u[s,t,maint] + 1 - h[s,t] >= (1/T)*q[s,t, maint])
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], u[s,t,maint] <= q[s,t, maint])
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], u[s,t,maint] <= h[s,t])
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], ong_m[s,t,maint] >= (1/T)*q[s,t,maint])
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], ong_m[s,t] <= q[s,t,maint])
-    @constraint(model, [s in 1:S, t in 1:T], maintenance[s,t] == sum(ong_m[s,t,maint] for maint in 1:(nb_maint - 1)))
+    @constraint(model, d_m == sum(d[maint]*m_type[maint] for maint in 1:nb_maint))
+    @constraint(model, [s in 1:S, i in 1:nb_state], q[s,1] == d_m*m[1])
+    @constraint(model, [s in 1:S, t in 1:(T-1)], q[s,t+1] == q[s,t] - u[s,t] + d_m*m[t+1])
 
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], u[s,t,maint] <= sum(m[t_prime,maint] for t_prime in 1:t)) #not necessary, could help reduce computing time
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], ong_m[s,t,maint] <= sum(m[t_prime,maint] for t_prime in 1:t)) #not necessary, could help reduce computing time
-    @constraint(model, [s in 1:S, t in 1:T, maint in 1:(nb_maint-1)], q[s,t,maint] <= sum(m[t_prime,maint] for t_prime in 1:t)) #not necessary, could help reduce computing time
+    @constraint(model, [s in 1:S, t in 1:T], u[s,t] + 1 - h[s,t] >= (1/T)*q[s,t])
+    @constraint(model, [s in 1:S, t in 1:T], u[s,t] <= q[s,t])
+    @constraint(model, [s in 1:S, t in 1:T], u[s,t] <= h[s,t])
 
-    @constraint(model, [t in 1:T], c[t] >= (alpha/S)*sum((1 - maintenance[s,t])*sum(x[s,t,state]*P_evac[state] for state in 1:nb_state) + maintenance[s,t]*(1-k[t])*100 for s in 1:S)) # capacity equals 0 in state 12, maximum value everywhere else
+    @constraint(model, [s in 1:S, t in 1:T], ong_m[s,t] >= (1/T)*q[s,t])
+    @constraint(model, [s in 1:S, t in 1:T], ong_m[s,t] <= q[s,t])
+
+    @constraint(model, [t in 1:T], c[t] >= (alpha/S)*sum((1 - ong_m[s,t])*x[s,t,state]*(100 - P_evac[state]) + ong_m[s,t]*(1-k[t])*100*x[s,t,state] for s in 1:S, state in 1:nb_state)) # capacity equals 0 in state 12, maximum value everywhere else
 
     @constraint(model, q_f == q_i - sum(k[t] for t in 1:T)) 
     @constraint(model, q_f >= 0) 
@@ -83,19 +83,21 @@ function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
     cost = objective_value(model)
 
 
-    m = [value(m[t, maint in 1:nb_maint]) for t in 1:T, maint in 1:nb_maint]
+    m = [value(m[t]) for t in 1:T]
+    m_type = [value(m_type[maint]) for maint in 1:nb_maint]
     k = [value(k[t]) for t in 1:T]
     #u = [value(u[s,t]) for  s in 1:S, t in 1:T]
-    q = [value(q[s,t,maint in 1:nb_maint]) for  s in 1:S, t in 1:T, maint in 1:nb_maint]
+    q = [value(q[s,t]) for  s in 1:S, t in 1:T]
+    ong_m = [value(ong_m[s,t]) for  s in 1:S, t in 1:T]
     δ = [value(δ[j]) for j in 0:Q]
 
     #ong_m = [value(ong_m[s,t]) for  s in 1:S, t in 1:T]
-    #x = [value(x[s,t,nb_state]) for  s in 1:S, t in 1:(T+1)]
-    #c = [value(c[t]) for t in 1:T]
+    x = [value(x[1,t,state]) for  t in 1:(T+1), state in 1:nb_state]
+    c = [value(c[t]) for t in 1:T]
     #sum_m = sum(value(m[t]) for t in 1:T)
 
     if status == MOI.OPTIMAL
-        return(cost, m,k,q,δ)
+        return(cost, m, m_type, k,q,δ,x,c,ong_m)
     else
         println("Aucune solution optimale trouvée.")
     end    
