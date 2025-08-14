@@ -1,4 +1,4 @@
-using Gurobi
+using Xpress
 using JuMP  
 using Distributions
 using Random
@@ -9,10 +9,9 @@ using StatsBase
 # compute value function
 function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
 
-    model = Model(Gurobi.Optimizer)
-    set_optimizer_attribute(model, "OutputFlag", 0)
-
-    d = 11
+    model = Model(Xpress.Optimizer)
+    set_optimizer_attribute(model, "threads", 1) 
+    #set_optimizer_attribute(model, "OutputFlag", 0)
 
     x_0 = zeros(nb_state)      
     x_0[s] = 1 
@@ -22,6 +21,7 @@ function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
     @variable(model, c[1:(T+1)] >= 0) # c[T+1] is the value function of the next strategic period
 
     @variable(model, m[1:T], Bin)
+    @variable(model, m_type[1:nb_maint], Bin)
     @variable(model, u[1:S,1:T], Bin)
     @variable(model, ong_m[1:S,1:T], Bin) #ongoing maintenance
     @variable(model, q[1:S,1:T] >= 0)
@@ -38,23 +38,26 @@ function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
 
     margin = 15 #margin to avoid maintenance that we can't finish
     @constraint(model, [t in 1:margin], m[T+1-t] == 0) 
+
+    @constraint(model, sum(m_type[maint] for maint in 1:nb_maint) == 1)
     @constraint(model, sum(m[t] for t in 1:T) <= 1)
+    @constraint(model, [i in 1:nb_state, j in 1:nb_state], P_m[i,j] == sum(m_type[maint]*P[i,j,maint] for maint in 1:nb_maint))
 
     # we consider that components are refirbushed since the first day of maintenance (no influence on cost), and no failure can happend during maintenance
-    @constraint(model, [s in 1:S, t in 2:(T+1), i in 1:nb_state], x[s,t,i] == (1-ong_m[s,t-1])*sum(P[i,j,1]*x[s,t-1,j] for j in 1:nb_state) + ong_m[s,t-1]*sum(P[i,j,2]*x[s,t-1,j] for j in 1:nb_state))
+    @constraint(model, [s in 1:S, t in 2:(T+1), i in 1:nb_state], x[s,t,i] == (1-ong_m[s,t-1])*sum(P[i,j,nb_maint]*x[s,t-1,j] for j in 1:nb_state) + ong_m[s,t-1]*sum(P_m[i,j]*x[s,t-1,j] for j in 1:nb_state))
 
     #@constraint(model, [s in 1:S, t in 1:(T)], sum(x[s,t,i] for i in 1:nb_state) == 1.0)
     @constraint(model, [s in 1:S, i in 1:nb_state], x[s,1,i] == x_0[i])
 
     #@constraint(model, [s in 1:S, t in 1:(T+1)], sum(x[s,t,j] for j in 1:nb_state) == 1)
 
-    #@constraint(model, sum(m[t] for t in 1:T) <= 1) #maximum one maintenance for the strategic period 
+    @constraint(model, sum(m[t] for t in 1:T) <= 1) #maximum one maintenance for the strategic period 
     # PROBLEM: this contraint together with sum x = 1 leads to infeasibility (sometimes we want two maintenances a month...)
 
     # deterministic rule: "maintain as soon as possible"
-
-    @constraint(model, [s in 1:S, i in 1:nb_state], q[s,1] == d*m[1])
-    @constraint(model, [s in 1:S, t in 1:(T-1)], q[s,t+1] == q[s,t] - u[s,t] + d*m[t+1])
+    @constraint(model, d_m == sum(d[maint]*m_type[maint] for maint in 1:nb_maint))
+    @constraint(model, [s in 1:S, i in 1:nb_state], q[s,1] == d_m*m[1])
+    @constraint(model, [s in 1:S, t in 1:(T-1)], q[s,t+1] == q[s,t] - u[s,t] + d_m*m[t+1])
 
     @constraint(model, [s in 1:S, t in 1:T], u[s,t] + 1 - h[s,t] >= (1/T)*q[s,t])
     @constraint(model, [s in 1:S, t in 1:T], u[s,t] <= q[s,t])
@@ -84,15 +87,16 @@ function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
 
 
     m = [value(m[t]) for t in 1:T]
+    m_type = [value(m_type[maint]) for maint in 1:nb_maint]
     k = [value(k[t]) for t in 1:T]
     #u = [value(u[s,t]) for  s in 1:S, t in 1:T]
-    #q = [value(q[s,t]) for  s in 1:S, t in 1:T]
-    #ong_m = [value(ong_m[s,t]) for  s in 1:S, t in 1:T]
-    #δ = [value(δ[j]) for j in 0:Q]
+    q = [value(q[s,t]) for  s in 1:S, t in 1:T]
+    ong_m = [value(ong_m[s,t]) for  s in 1:S, t in 1:T]
+    δ = [value(δ[j]) for j in 0:Q]
 
     #ong_m = [value(ong_m[s,t]) for  s in 1:S, t in 1:T]
-    #x = [value(x[1,t,state]) for  t in 1:(T+1), state in 1:nb_state]
-    #c = [value(c[t]) for t in 1:T]
+    x = [value(x[1,t,state]) for  t in 1:(T+1), state in 1:nb_state]
+    c = [value(c[t]) for t in 1:T]
     #sum_m = sum(value(m[t]) for t in 1:T)
 
     if status == MOI.OPTIMAL

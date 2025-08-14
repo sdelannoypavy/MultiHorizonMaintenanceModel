@@ -4,7 +4,7 @@ using DataFrames
 using Statistics
 using DelimitedFiles
 
-ds = Dataset("Documents/data_merged.nc", "r")
+ds = Dataset("data_merged.nc", "r")
 
 # shww = significant height of wind waves 
 shww = ds["shww"][:]

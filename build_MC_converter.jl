@@ -1,6 +1,6 @@
 MTBF = 588
 
-p = (12/MTBF)/365 #gives a rough estimatin of p_i i+1
+p = (11/MTBF)/365 #gives a rough estimatin of p_i i+1
 
 function proba(p,i,j)
     # j > i
@@ -62,3 +62,5 @@ end
 P[nb_state,nb_state,2] = 1.0
 
 d = [11,0] # length of maintenance does not depend on state 
+
+#100*(proba(p,1,2) - proba(p,11,12))/proba(p,11,12)
