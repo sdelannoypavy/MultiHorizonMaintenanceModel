@@ -1,0 +1,137 @@
+FICO Xpress v9.6.0, Hyper, solve started 14:22:33, Aug 14, 2025
+Heap usage: 136KB (peak 136KB, 125KB system)
+Minimizing LP  using 1 thread and up to 1007GB memory, with these control settings:
+OUTPUTLOG = 1
+MPSNAMELENGTH = 64
+CALLBACKFROMMASTERTHREAD = 1
+Original problem has:
+         1 rows            1 cols            1 elements
+Presolved problem has:
+         0 rows            0 cols            0 elements
+Presolve finished in 0 seconds
+Heap usage: 136KB (peak 154KB, 125KB system)
+ 
+   Its         Obj Value      S   Ninf  Nneg   Sum Dual Inf  Time
+     0          1.000000      D      0     0        .000000     0
+Uncrunching matrix
+Optimal solution found
+Dual solved problem
+  0 simplex iterations in 0.00 seconds at time 0
+
+Final objective                       : 1.000000000000000e+00
+  Max primal violation      (abs/rel) :       0.0 /       0.0
+  Max dual violation        (abs/rel) :       0.0 /       0.0
+  Max complementarity viol. (abs/rel) :       0.0 /       0.0
+Status: OPTIMAL
+Objective value: 1.0
+x = 1.0
+FICO Xpress v9.6.0, Hyper, solve started 14:22:34, Aug 14, 2025
+Heap usage: 136KB (peak 136KB, 235KB system)
+Minimizing LP  using 1 thread and up to 1007GB memory, with these control settings:
+OUTPUTLOG = 1
+MPSNAMELENGTH = 64
+CALLBACKFROMMASTERTHREAD = 1
+Original problem has:
+         1 rows            1 cols            1 elements
+Presolved problem has:
+         0 rows            0 cols            0 elements
+Presolve finished in 0 seconds
+Heap usage: 136KB (peak 154KB, 235KB system)
+ 
+   Its         Obj Value      S   Ninf  Nneg   Sum Dual Inf  Time
+     0          1.000000      D      0     0        .000000     0
+Uncrunching matrix
+Optimal solution found
+Dual solved problem
+  0 simplex iterations in 0.00 seconds at time 0
+
+Final objective                       : 1.000000000000000e+00
+  Max primal violation      (abs/rel) :       0.0 /       0.0
+  Max dual violation        (abs/rel) :       0.0 /       0.0
+  Max complementarity viol. (abs/rel) :       0.0 /       0.0
+Status: OPTIMAL
+Objective value: 1.0
+x = 1.0
+FICO Xpress v9.6.0, Hyper, solve started 14:22:34, Aug 14, 2025
+Heap usage: 136KB (peak 136KB, 345KB system)
+Minimizing LP  using 1 thread and up to 1007GB memory, with these control settings:
+OUTPUTLOG = 1
+MPSNAMELENGTH = 64
+CALLBACKFROMMASTERTHREAD = 1
+Original problem has:
+         1 rows            1 cols            1 elements
+Presolved problem has:
+         0 rows            0 cols            0 elements
+Presolve finished in 0 seconds
+Heap usage: 136KB (peak 154KB, 345KB system)
+ 
+   Its         Obj Value      S   Ninf  Nneg   Sum Dual Inf  Time
+     0          1.000000      D      0     0        .000000     0
+Uncrunching matrix
+Optimal solution found
+Dual solved problem
+  0 simplex iterations in 0.00 seconds at time 0
+
+Final objective                       : 1.000000000000000e+00
+  Max primal violation      (abs/rel) :       0.0 /       0.0
+  Max dual violation        (abs/rel) :       0.0 /       0.0
+  Max complementarity viol. (abs/rel) :       0.0 /       0.0
+Status: OPTIMAL
+Objective value: 1.0
+x = 1.0
+FICO Xpress v9.6.0, Hyper, solve started 14:22:34, Aug 14, 2025
+Heap usage: 136KB (peak 136KB, 455KB system)
+Minimizing LP  using 1 thread and up to 1007GB memory, with these control settings:
+OUTPUTLOG = 1
+MPSNAMELENGTH = 64
+CALLBACKFROMMASTERTHREAD = 1
+Original problem has:
+         1 rows            1 cols            1 elements
+Presolved problem has:
+         0 rows            0 cols            0 elements
+Presolve finished in 0 seconds
+Heap usage: 136KB (peak 154KB, 455KB system)
+ 
+   Its         Obj Value      S   Ninf  Nneg   Sum Dual Inf  Time
+     0          1.000000      D      0     0        .000000     0
+Uncrunching matrix
+Optimal solution found
+Dual solved problem
+  0 simplex iterations in 0.00 seconds at time 0
+
+Final objective                       : 1.000000000000000e+00
+  Max primal violation      (abs/rel) :       0.0 /       0.0
+  Max dual violation        (abs/rel) :       0.0 /       0.0
+  Max complementarity viol. (abs/rel) :       0.0 /       0.0
+Status: OPTIMAL
+Objective value: 1.0
+x = 1.0
+FICO Xpress v9.6.0, Hyper, solve started 14:22:34, Aug 14, 2025
+Heap usage: 136KB (peak 136KB, 565KB system)
+Minimizing LP  using 1 thread and up to 1007GB memory, with these control settings:
+OUTPUTLOG = 1
+MPSNAMELENGTH = 64
+CALLBACKFROMMASTERTHREAD = 1
+Original problem has:
+         1 rows            1 cols            1 elements
+Presolved problem has:
+         0 rows            0 cols            0 elements
+Presolve finished in 0 seconds
+Heap usage: 136KB (peak 154KB, 564KB system)
+ 
+   Its         Obj Value      S   Ninf  Nneg   Sum Dual Inf  Time
+     0          1.000000      D      0     0        .000000     0
+Uncrunching matrix
+Optimal solution found
+Dual solved problem
+  0 simplex iterations in 0.00 seconds at time 0
+
+Final objective                       : 1.000000000000000e+00
+  Max primal violation      (abs/rel) :       0.0 /       0.0
+  Max dual violation        (abs/rel) :       0.0 /       0.0
+  Max complementarity viol. (abs/rel) :       0.0 /       0.0
+[ Info: Xpress: Found license file /logiciels64/ampl/itesla/xp9.6.0_linux_x86_64_setup/bin/xpauth.xpr
+[ Info: Xpress: Development license detected.
+Status: OPTIMAL
+Objective value: 1.0
+x = 1.0
