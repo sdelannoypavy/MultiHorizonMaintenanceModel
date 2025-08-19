@@ -36,14 +36,14 @@ function build_P(theta)
 
     P[4,4,2] = 1.0
 
-    return P, c
+    return P
 end
 
 
 # test
 
-P_1, _ = build_P(365*MTBF/2)
-P_2, _ = build_P(365*MTBF/100)
+P_1 = build_P(365*MTBF/2)
+P_2 = build_P(365*MTBF/100)
 
 
 @assert all(x -> x <= 1, P_1)
@@ -53,10 +53,10 @@ tol = 1e-6
 @assert all(abs(sum(P_1[i, j, maint] for i in 1:nb_state) - 1) ≤ tol
             for j in 1:nb_state, maint in 1:2)
 
-S = 1
+S = 5
 years = 1
-Q = 15
-d = 15
+Q = 5
+d = 5
 
 
 Vals_all_1, Policies_m_1, Policies_k_1 = Bellman(years,Q,S,h,nb_state,P_1,d)

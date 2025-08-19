@@ -1,4 +1,4 @@
-# modifier les données pour avoir uniquement des mois de 30 jours! 
+
 
 using NCDatasets
 using Dates

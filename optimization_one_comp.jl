@@ -20,7 +20,7 @@ function V(T,s_init,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
 
     @variable(model, 0 <= x[1:S,1:(T+1),1:nb_state] <= 1 + tol) # we need the value at T+1 to get next strategic period value function
 
-    @variable(model, c[1:(T+1),1:nb_state] >= 0) # c[T+1] is the value function of the next strategic period
+    @variable(model, c[1:(T+1),1:S] >= 0) # c[T+1] is the value function of the next strategic period
 
     @variable(model, m[1:T], Bin)
     @variable(model, u[1:S,1:T], Bin)
@@ -33,7 +33,7 @@ function V(T,s_init,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
     M = 1e6  #Big M, could be changed to avoid numerical 
     alpha = 1.0
 
-    @objective(model, Min, (alpha/S)*sum(c[t,s] for t in 1:(T+1), s in 1:nb_state))
+    @objective(model, Min, (alpha/S)*sum(c[t,s] for t in 1:(T+1), s in 1:S))
 
     margin = 30 #margin to avoid maintenance that we can't finish
     @constraint(model, [t in 1:margin], m[T+1-t] == 0) 
