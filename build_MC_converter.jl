@@ -5,7 +5,7 @@ P_evac = vcat([100.0 for i in 1:11], [0.0]) # vector of capacity levels
 
 function build_P_converter(MTBF)
 
-    p = (11/MTBF)/360
+    p = (11/MTBF)/365
 
     P = zeros(nb_state, nb_state, 2)
 

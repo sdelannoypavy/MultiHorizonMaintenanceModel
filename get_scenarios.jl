@@ -1,7 +1,7 @@
 using DelimitedFiles
 
-scenarios_h = Array{Float64}(undef, 10, 6, 62)
-scenarios_p = Array{Float64}(undef, 10, 6, 62)
+scenarios_h = Array{Int64}(undef, 80, 6, 62)
+scenarios_p = Array{Float64}(undef, 80, 6, 62)
 
 # read txt files for each strategic period type, goup data in one file
 for j in 1:6
@@ -13,13 +13,13 @@ for j in 1:6
 end
 end
 
-h = Array{Float64}(undef, 30*6, 10, 62)
-product = Array{Float64}(undef, 30*6, 10, 62)
+h = Array{Int64}(undef, 30*6, 80, 62)
+product = Array{Float64}(undef, 30*6, 80, 62)
 
 # build scenarios, same scenarios for strategic periods with the same type
 for T in 1:(30*6)
 
-    for s in 1:10
+    for s in 1:80
         type = mod(T,6)
         if mod(T,6) == 0
             type = 6

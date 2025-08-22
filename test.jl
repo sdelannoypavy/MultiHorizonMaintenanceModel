@@ -1,4 +1,4 @@
-#Vals_all, Policies_m, Policies_k = Bellman(1,11,1,h,12,P,1)
+Vals_all, Policies_m, Policies_k = Bellman(1,11,1,h,12,P,1)
 
 for s in 1:nb_state
     for t in 1:6

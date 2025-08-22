@@ -6,7 +6,7 @@ using DataFrames
 using Statistics
 using DelimitedFiles
 
-nb_years = 100
+nb_years = 80
 
 ds = Dataset("data_merged.nc", "r")
 
@@ -66,9 +66,9 @@ scenarios_p = Production.(scenarios_swh)
 # store as text files. One for each strategic period type.
 for j in 1:6
     slice_h = scenarios_h[:, j, :]
-    writedlm("scenarios_h$(j).txt", slice_h)
+    writedlm("scenarios/scenarios_h$(j).txt", slice_h)
     slice_p = scenarios_p[:, j, :]
-    writedlm("scenarios_p$(j).txt", slice_p)
+    writedlm("scenarios/scenarios_p$(j).txt", slice_p)
 end
 
 # code to rebuild scenarios using text files. Used to check we retrieve initial scenarios. 

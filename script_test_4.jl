@@ -9,32 +9,29 @@ include("optimization_one_comp.jl")
 
 MTBF = 1 # in years
 
-nb_state = 4
-P_evac = vcat([100.0 for i in 1:3], [0.0]) # vector of capacity levels
+nb_state = 3
+P_evac = vcat([100.0 for i in 1:2], [0.0]) # vector of capacity levels
 
-b = 3/(360*MTBF)
+b = 3/(365*MTBF)
 
 function build_P(theta)
-    # theta = mean time in state 3
+    # theta = mean time in state 2
 
-    P = zeros(4, 4, 2)
+    P = zeros(3, 3, 2)
 
-    for i in 1:4
+    for i in 1:3
         P[1,i,1] = 1.0 
     end
 
-    mean_time_state_1 = (2/3)*360*MTBF - theta 
+    mean_time_state_1 = 365*MTBF - theta 
         
     P[1,1,2] = 1.0 - 1/mean_time_state_1
     P[2,1,2] = 1/mean_time_state_1
         
-    P[3,3,2] = 1.0 - 1/theta
-    P[4,3,2] = 1/theta
+    P[2,2,2] = 1.0 - 1/theta
+    P[3,2,2] = 1/theta
 
-    P[2,2,2] = 1.0 - b
-    P[3,2,2] = b
-
-    P[4,4,2] = 1.0
+    P[3,3,2] = 1.0
 
     return P
 end
@@ -42,8 +39,8 @@ end
 
 # test
 
-P_1 = build_P(365*MTBF/2)
-P_2 = build_P(365*MTBF/100)
+P_1 = build_P(365*MTBF*0.99) #long theta, do not maintain in state 2
+P_2 = build_P(365*MTBF*0.1) #short theta, maintain in state 2
 
 
 @assert all(x -> x <= 1, P_1)
@@ -53,10 +50,10 @@ tol = 1e-6
 @assert all(abs(sum(P_1[i, j, maint] for i in 1:nb_state) - 1) ≤ tol
             for j in 1:nb_state, maint in 1:2)
 
-S = 5
+S = 1
 years = 1
-Q = 5
-d = 5
+Q = 10
+d = 10
 
 
 Vals_all_1, Policies_m_1, Policies_k_1 = Bellman(years,Q,S,h,nb_state,P_1,d)
@@ -64,7 +61,7 @@ simulated_cost_11 = simulate(Policies_m_1,Policies_k_1,h,nb_state, years,Q,d,P_1
 simulated_cost_12 = simulate(Policies_m_1,Policies_k_1,h,nb_state, years,Q,d,P_2)
 
 Vals_all_2, Policies_m_2, Policies_k_2 = Bellman(years,Q,S,h,nb_state,P_2,d)
-simulated_cost_22 = simulate(Policies_m_2,Policies_k_2,h,nb_state, years,Q,d,P_1)
+simulated_cost_22 = simulate(Policies_m_2,Policies_k_2,h,nb_state, years,Q,d,P_2)
 simulated_cost_21 = simulate(Policies_m_2,Policies_k_2,h,nb_state, years,Q,d,P_1)
 
 filename_Vals_1 = "Policies/Vals_1.jld2"

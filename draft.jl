@@ -1,23 +1,25 @@
-using CSV
-using DataFrames
-using Plots
-using LaTeXStrings
+# Lire les lignes du fichier
+lines = readlines("scenarios/scenarios_h6.txt")
 
-# Chargement du CSV
-df = CSV.read("results_test_3.csv", DataFrame)
+# Initialiser liste pour les valeurs non valides
+invalid_values = []
 
-plot(df.MTBF_optim, df.cost,
-     xlabel="MTBF in optimization",
-     ylabel="Simulated cost",
-     legend=false,
-     marker=:circle,
-     label="Cost")
+# Parcourir chaque ligne
+for (i, line) in enumerate(lines)
+    nums = parse.(Int, split(line))  # convertir en entiers
+    for (j, val) in enumerate(nums)
+        if val != 0 && val != 1
+            push!(invalid_values, (i, j, val))  # (ligne, colonne, valeur)
+        end
+    end
+end
 
-# Ajouter une barre verticale pointillée à true_MTBF
-vline!([true_MTBF], linestyle=:dash, color=:red, label="true_MTBF")
-
-annotate!(true_MTBF, -0.1, text(L"\theta^{\mathrm{MTBF}}", :red, 12, :center))
-
-
-savefig("MTBF_sensitivity.pdf")
-display(current())
+# Afficher les résultats
+if !isempty(invalid_values)
+    println("Valeurs différentes de 0 et 1 trouvées :")
+    for (i, j, val) in invalid_values
+        println("  À la ligne $i, colonne $j : $val")
+    end
+else
+    println("Toutes les valeurs sont 0 ou 1.")
+end

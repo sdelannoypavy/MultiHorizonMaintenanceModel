@@ -5,36 +5,40 @@ using DataFrames
 using JLD2
 
 include("get_scenarios.jl")
-include("build_MC_converter.jl")
+include("build_MC_pump.jl")
 include("optimization_one_comp.jl")
 include("get_params.jl")
 
 header = DataFrame(MTBF=Int[], S=Int[], years=Int[], Q=Int[], d=Int[], cost=Float64[], simulated_cost=Float64[])
 CSV.write("results.csv", header)
 
+l = ReentrantLock()
+
 for MTBF in MTBF_list 
 
     if !(MTBF === nothing) 
-        global P = build_P_converter(MTBF)
+        P_simu = build_P_converter(MTBF)
     else
         MTBF = true_MTBF #to get the right value in the CSV file
+        P_simu = P
     end
 
     for d in d_list
-        for S in n_opt_list
+        Threads.@threads for S in n_opt_list
             for years in years_list
                 for Q in Q_list
 
                     for n_test in 1:nb_test_per_data
 
                         local Vals_all, Policies_m, Policies_k
-                        Vals_all, Policies_m, Policies_k = Bellman(years,Q,S,h,nb_state,P,d)
+                        Vals_all, Policies_m, Policies_k = Bellman(years,Q,S,h,nb_state,P_simu,d)
                         local cost  = Vals_all[1,Q+1,1]
-                        simulated_cost = simulate(Policies_m,Policies_k,h,nb_state, years,Q,d,P)
+                        simulated_cost = simulate(Policies_m,Policies_k,h,nb_state, years,Q,d,P_simu)
 
-                        row = DataFrame(MTBF=MTBF, S=S, years=years, Q=Q, d=d, cost=cost, simulated_cost=simulated_cost)
-
-                        CSV.write("results.csv", row; append=true, writeheader=false)
+                        lock(l) do
+                            row = DataFrame(MTBF=MTBF, S=S, years=years, Q=Q, d=d, cost=cost, simulated_cost=simulated_cost)
+                            CSV.write("results.csv", row; append=true, writeheader=false)
+                        end
 
                         filename_Vals = "Policies/Vals_$(d)_$(S)_$(years)_$(Q)_$(n_test)_$(MTBF).jld2"
                         @save filename_Vals Vals_all
@@ -55,3 +59,4 @@ end
 
 println("✅ Results written in 'results.csv'")
 
+#JULIA_NUM_THREADS=2 julia main.jl
