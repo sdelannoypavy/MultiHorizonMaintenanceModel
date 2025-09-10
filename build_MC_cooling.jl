@@ -1,6 +1,6 @@
 MTBF_tot = 43
 
-p = (12/MTBF)/365 
+p = (12/MTBF_tot)/365 
 
 nb_state_water = 3 #could be more
 

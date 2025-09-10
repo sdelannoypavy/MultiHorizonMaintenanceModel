@@ -1,9 +1,9 @@
-true_MTBF = 588 # in years
+true_MTBF_converter = 588 # in years
 
 nb_state = 12
 P_evac = vcat([100.0 for i in 1:11], [0.0]) # vector of capacity levels
 
-function build_P_converter(MTBF)
+function build_P_converter(MTBF,nb_state)
 
     p = (11/MTBF)/365
 
@@ -23,4 +23,4 @@ function build_P_converter(MTBF)
     return P
 end
 
-P = build_P_converter(true_MTBF)
+#P = build_P_converter(true_MTBF)

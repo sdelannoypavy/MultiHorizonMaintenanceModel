@@ -60,7 +60,7 @@ function Production(swh)
 end
 
 threshold = 1.0 # it is 1.5 officialy, but Yann says it is 1.0 in the reality
-scenarios_h = Int.(scenarios_swh .< threshold)
+scenarios_h = map(x -> x < 0 ? -1 : (x < threshold ? 1 : 0), scenarios_swh) # if value is -1, keep -1. otherwise compare with threashold
 scenarios_p = Production.(scenarios_swh)
 
 # store as text files. One for each strategic period type.
