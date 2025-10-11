@@ -7,109 +7,116 @@ using StatsBase
 
 
 # compute value function
-function V(T,nb_maint,s,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
+function V(T,s_init,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
 
+    println(s_init,q_i)
     model = Model(Gurobi.Optimizer)
     set_optimizer_attribute(model, "OutputFlag", 0)
+    #set_optimizer_attribute(model, "MIPFocus", 2)
+    #set_optimizer_attribute(model, "Presolve", 2)
 
     x_0 = zeros(nb_state)      
-    x_0[s] = 1 
+    x_0[s_init] = 1 
 
-    @variable(model, 0 <= x[1:S,1:(T+1),1:nb_state] <= 1) # we need the value at T+1 to get next strategic period value function
+    tol = 1e-1
 
-    @variable(model, c[1:(T+1)] >= 0) # c[T+1] is the value function of the next strategic period
+    @variable(model, 0 - tol <= x[1:S,1:(T+1),1:nb_state] <= 1 + tol) # we need the value at T+1 to get next strategic period value function
+
+    @variable(model, c[1:(T+1),1:S] >= -1000*tol) # c[T+1] is the value function of the next strategic period
 
     @variable(model, m[1:T], Bin)
-    @variable(model, m_type[1:nb_maint], Bin)
     @variable(model, u[1:S,1:T], Bin)
     @variable(model, ong_m[1:S,1:T], Bin) #ongoing maintenance
-    @variable(model, q[1:S,1:T] >= 0)
+    @variable(model, q[1:S,1:T] >=0, Int)
     @variable(model, k[1:T], Bin)
     @variable(model, q_f, Int)
-    @variable(model, δ[0:Q], Bin) # value of quota as the end of the period formulated using Bin. Usefull to write final cost.    
-    @variable(model, P_m[1:nb_state, 1:nb_state] >=0)
-    @variable(model, d_m >=0)
+    @variable(model, δ[0:Q], Bin) # value of quota as the end of the period formulated using Bin. Usefull to write final cost. 
 
-    @objective(model, Min, sum(c[t] for t in 1:(T+1)))
+    alpha = 1.0
 
-    M = 1e6  #Big M, could be changed to avoid numerical 
-    alpha = 1 #multiplier for the cost,could be increased to avoid numerical instability
+    @objective(model, Min, (alpha/S)*sum(c[t,s] for t in 1:(T+1), s in 1:S))
 
-    margin = 15 #margin to avoid maintenance that we can't finish
+    @constraint(model, [s = 1:S, t = 1:(T+1)], sum(x[s,t,i] for i in 1:nb_state) <= 1 + tol)
+    @constraint(model, [s = 1:S, t = 1:(T+1)], sum(x[s,t,i] for i in 1:nb_state) >= 1 - tol)
+
+    @constraint(model, [s = 1:S, t = 1:T], q[s,t] <= d*T)
+
+    margin = 30 #margin to avoid maintenance that we can't finish
     @constraint(model, [t in 1:margin], m[T+1-t] == 0) 
 
-    @constraint(model, sum(m_type[maint] for maint in 1:nb_maint) == 1)
-    @constraint(model, sum(m[t] for t in 1:T) <= 1)
-    @constraint(model, [i in 1:nb_state, j in 1:nb_state], P_m[i,j] == sum(m_type[maint]*P[i,j,maint] for maint in 1:nb_maint))
+    # state dynamics
 
-    # we consider that components are refirbushed since the first day of maintenance (no influence on cost), and no failure can happend during maintenance
-    @constraint(model, [s in 1:S, t in 2:(T+1), i in 1:nb_state], x[s,t,i] == (1-ong_m[s,t-1])*sum(P[i,j,nb_maint]*x[s,t-1,j] for j in 1:nb_state) + ong_m[s,t-1]*sum(P_m[i,j]*x[s,t-1,j] for j in 1:nb_state))
+    @constraint(model, [s = 1:S, t = 2:(T+1), i = 1:nb_state], !ong_m[s,t-1] --> {x[s,t,i] == sum(P[i,j]*x[s,t-1,j] for j in 1:nb_state)}) # no maintenance
+    @constraint(model, [s = 1:S, t = 2:(T+1), i = 2:nb_state], ong_m[s,t-1] --> {x[s,t,i] == 0.0}) #maintenance
+    @constraint(model, [s = 1:S, t = 2:(T+1)], ong_m[s,t-1] --> {x[s,t,1] == 1.0}) #maintenance
 
-    #@constraint(model, [s in 1:S, t in 1:(T)], sum(x[s,t,i] for i in 1:nb_state) == 1.0)
-    @constraint(model, [s in 1:S, i in 1:nb_state], x[s,1,i] == x_0[i])
-
-    #@constraint(model, [s in 1:S, t in 1:(T+1)], sum(x[s,t,j] for j in 1:nb_state) == 1)
-
-    @constraint(model, sum(m[t] for t in 1:T) <= 1) #maximum one maintenance for the strategic period 
-    # PROBLEM: this contraint together with sum x = 1 leads to infeasibility (sometimes we want two maintenances a month...)
+    @constraint(model, [s = 1:S, i = 1:nb_state], x[s,1,i] == x_0[i])
 
     # deterministic rule: "maintain as soon as possible"
-    @constraint(model, d_m == sum(d[maint]*m_type[maint] for maint in 1:nb_maint))
-    @constraint(model, [s in 1:S, i in 1:nb_state], q[s,1] == d_m*m[1])
-    @constraint(model, [s in 1:S, t in 1:(T-1)], q[s,t+1] == q[s,t] - u[s,t] + d_m*m[t+1])
 
-    @constraint(model, [s in 1:S, t in 1:T], u[s,t] + 1 - h[s,t] >= (1/T)*q[s,t])
-    @constraint(model, [s in 1:S, t in 1:T], u[s,t] <= q[s,t])
-    @constraint(model, [s in 1:S, t in 1:T], u[s,t] <= h[s,t])
+    @constraint(model, [s = 1:S, i = 1:nb_state], q[s,1] == d*m[1])
+    @constraint(model, [s in 1:S, t in 1:(T-1)], q[s,t+1] == q[s,t] - u[s,t] + d*m[t+1])
 
-    @constraint(model, [s in 1:S, t in 1:T], ong_m[s,t] >= (1/T)*q[s,t])
-    @constraint(model, [s in 1:S, t in 1:T], ong_m[s,t] <= q[s,t])
+    @constraint(model, [s = 1:S, t = 1:T], ong_m[s,t] --> {u[s,t] == h[s,t]})
+    @constraint(model, [s = 1:S, t = 1:T], !ong_m[s,t] --> {u[s,t] == 0})
 
-    @constraint(model, [t in 1:T], c[t] >= (alpha/S)*sum((1 - ong_m[s,t])*x[s,t,state]*(100 - P_evac[state]) + ong_m[s,t]*(1-k[t])*100*x[s,t,state] for s in 1:S, state in 1:nb_state)) # capacity equals 0 in state 12, maximum value everywhere else
+    @constraint(model, [s = 1:S, t = 1:T], ong_m[s,t] >= (1/(d*T))*q[s,t])
+    @constraint(model, [s = 1:S, t = 1:T], ong_m[s,t] <= q[s,t])
+
+
+    # cost
+
+    @constraint(model, [s = 1:S, t = 1:T], !ong_m[s,t] --> {c[t,s] == sum(x[s,t,state]*(100 - P_evac[state]) for state in 1:nb_state)})
+    @constraint(model, [s = 1:S, t = 1:T], ong_m[s,t] --> {c[t,s] == (1-k[t])*100})
+
 
     @constraint(model, q_f == q_i - sum(k[t] for t in 1:T)) 
-    @constraint(model, q_f >= 0) 
-    
+    @constraint(model, q_f >= 0)
+
     # ensure delta as the right value
-    @constraint(model, [j in 0:Q], q_f - j <=  M * (1 - δ[j]))
-    @constraint(model, [j in 0:Q], q_f - j >= -M * (1 - δ[j]))
     @constraint(model, sum(δ[j] for j in 0:Q) == 1)
+    @constraint(model, q_f == sum(j * δ[j] for j in 0:Q))
+    
+    @constraint(model, [j in 0:Q, s in 1:S], δ[j] --> {c[T+1,s] == sum(x[s,T+1, i] * Vals[i, j+1] for i in 1:nb_state)})
 
-    @constraint(model, [j in 0:Q], c[T+1] + M * (1 - δ[j]) >= (alpha/S)*sum(sum(x[s,T+1, i] * Vals[i, j+1] for i in 1:nb_state) for s in 1:S))
+    
+    try
+        optimize!(model)
 
-    optimize!(model)
+        status = termination_status(model)
+        # println("Statut de l'optimisation: $status")
 
-    status = termination_status(model)
-    # println("Statut de l'optimisation: $status")
-
-    cost = objective_value(model)
+        cost = objective_value(model)
 
 
-    m = [value(m[t]) for t in 1:T]
-    m_type = [value(m_type[maint]) for maint in 1:nb_maint]
-    k = [value(k[t]) for t in 1:T]
-    #u = [value(u[s,t]) for  s in 1:S, t in 1:T]
-    q = [value(q[s,t]) for  s in 1:S, t in 1:T]
-    ong_m = [value(ong_m[s,t]) for  s in 1:S, t in 1:T]
-    δ = [value(δ[j]) for j in 0:Q]
+        m = [value(m[t]) for t in 1:T]
+        k = [value(k[t]) for t in 1:T]
+        
+        if (status == MOI.OPTIMAL) || (status == MOI.LOCALLY_SOLVED)
+            return(cost, m, k)
+        else
+            println("Aucune solution optimale trouvée.")
+            println(status)
+            return(0,[0 for t in 1:T],[0 for t in 1:T])
+        end    
+    catch e
+        println("Erreur pendant la résolution : ", e)
+        return(0,[0 for t in 1:T],[0 for t in 1:T])
+    end
 
-    #ong_m = [value(ong_m[s,t]) for  s in 1:S, t in 1:T]
-    x = [value(x[1,t,state]) for  t in 1:(T+1), state in 1:nb_state]
-    c = [value(c[t]) for t in 1:T]
-    #sum_m = sum(value(m[t]) for t in 1:T)
-
-    if status == MOI.OPTIMAL
-        return(cost, m, k)
-    else
-        println("Aucune solution optimale trouvée.")
-    end    
 
 end
 
 
-function Bellman(years,Q,S,h,nb_state,P)
+function Bellman(years,Q,S,h,nb_state,P,d)
 
     Tmax = 6*years
+
+    if S > 0
+        h_reduced = reduce_array(h,S)#randomly select S scenarios
+    else
+        h_reduced = h
+    end
 
     Vals_old = zeros(nb_state, Q+1)
 
@@ -124,9 +131,24 @@ function Bellman(years,Q,S,h,nb_state,P)
         Vals_new = zeros(nb_state, Q+1)
         for s in 1:nb_state
             for q in 0:Q
-                h_t = h[Tmax-t+1, :, :]  # taille (S, T)
+                h_t = h_reduced[Tmax-t+1, :, :]  # taille (S, T)
                 T = 62 - count(==( -1 ), h_t[1,:]) # - 1 means ends of the month, so that we can represent months with variable lengths with vectors of the same dimensions
-                val, m_opt, k_opt = V(T,nb_maint,s,q,S,h_t,nb_state,P,Q,Vals_old,d,P_evac)
+                println(t)
+
+                if (Tmax - t + 1 % 6 == 0) #end year
+                    for q in 1:Q
+                        for state in 1:nb_sttae
+                            Vals_old[state,q] = Vals_old[state,Q+1] #quotas renewed
+                        end
+                    end
+                end
+
+                if S == 0
+                    h = ones(1, T)
+                    val, m_opt, k_opt = V(T,s,q,1,h,nb_state,P,Q,Vals_old,d,P_evac)
+                else
+                    val, m_opt, k_opt = V(T,s,q,S,h_t,nb_state,P,Q,Vals_old,d,P_evac)
+                end
                 Vals_new[s, q+1] = val
                 Policies_m[s,q+1,Tmax - t + 1,1:T] = m_opt
                 Policies_k[s,q+1,Tmax - t + 1,1:T] = k_opt
@@ -140,113 +162,149 @@ function Bellman(years,Q,S,h,nb_state,P)
 
 end
 
-function simulate_period(Policies_m_t,state,h,nb_state)
+function simulate_period(Policies_m_t,Policies_k_t,state,h,nb_state,d,P)
 
     # simulate states only over a strategic period for one failure scenario, weather scenario given by h, starting from state
-
-    states = [state]
-
-    d = max(state - 1,1)
 
     T = 62 - count(==( -1 ), h)
 
     u = [0 for i in 1:T]
+    ong_m = [0 for i in 1:T]
     q = [0 for i in 1:T]
 
-    q[1] = d*Policies_m_t[1]
+    q[1] = d*round(Int,Policies_m_t[1])
 
-    last_state = state
+    last_state = zeros(nb_state)
+    last_state[state] = 1.0
 
     if (q[1]>0)&&(h[1]==1)
         u[1] = 1
     end
 
+    costs = []
+
+    if q[1] >= 1
+        new_cost = 100*(1-Policies_k_t[1])
+    else 
+        new_cost = 100 - sum(last_state[i]*P_evac[i] for i in 1:nb_state)
+    end 
+    push!(costs, new_cost)
+
     for t in 1:T-1
-        q[t+1] = q[t] - u[t] + d*Policies_m_t[t+1]
+
+        if u[t] == 0
+            new_state = P[:,:,2]*last_state # no maintenance
+        else 
+            new_state = P[:,:,1]*last_state # maintenance
+        end
+
+        q[t+1] = q[t] - u[t] + d*round(Int,Policies_m_t[t+1])
         if (q[t+1]>0)&&(h[t+1]==1)
             u[t+1] = 1
         end
-        probas = [0.0 for i in 1:nb_state]
 
-        if u[t] == 0
-            probas = P_w[:, last_state]
+        if q[t+1] >= 1
+            new_cost = 100*(1-Policies_k_t[t+1])
         else 
-            probas = P_m[:, last_state]
-        end
-        last_state = sample(1:nb_state, Weights(probas))
+            new_cost = 100 - sum(new_state[i]*P_evac[i] for i in 1:nb_state)
+        end 
 
-        push!(states, last_state)
+        last_state = new_state
+        push!(costs, new_cost)
     end
 
     if u[T] == 0
-        probas = P_w[last_state, :]
+        last_state = P[:,:,2]*last_state # no maintenance
     else 
-        probas = P_m[last_state, :]
+        last_state = P[:,:,1]*last_state # maintenance
     end
-    new_state = sample(1:nb_state, Weights(probas))
 
-    return states,new_state
+    return sum(costs), last_state
 
 end 
 
 
-function simulate(Policies_m,Policies_k,h,nb_state, years,Q)
+function simulate_concession_period(Policies_m, Policies_k, h, nb_state, years, Q, d, P)
 
     # simulate states over the entire concession period
 
+    total_cost = 0
 
-    last_state = 12
-    state_list = []
-    last_q = Q
+    nb_product_states = nb_state*(Q+1) #index nb_state*q + state
+    last_product_state = zeros(nb_product_states)
+    last_product_state[nb_state*Q+1] = 1.0# at the beginning of the concession period the substation is new : state = 1, q = Q
 
     for t in 1:(6*years)
 
-        Policies_k_t = Policies_k[last_state,round(Int,last_q) + 1,t,:]
-        sum_k = sum(Policies_k_t )
+        new_product_state = zeros(nb_product_states)
+        new_cost = 0
 
-        Policies_m_t = Policies_m[last_state,round(Int,last_q) + 1,t,:]
-        h_t = h[t, 1, :]
+        for product_state in 1:nb_product_states 
 
-        new_states, last_state = simulate_period(Policies_m_t,last_state,h_t,nb_state)
+            q, r = divrem(product_state - 1, nb_state)
+            state = r + 1
 
-        last_q -= sum_k
+            Policies_k_t = Policies_k[state,round(Int,q) + 1,t,:]
+            sum_k = sum(Policies_k_t)
+
+            Policies_m_t = Policies_m[state,round(Int,q) + 1,t,:]
+            h_t = h[t, :]
+
+            cost_state, new_x = simulate_period(Policies_m_t, Policies_k_t, state, h_t, nb_state, d, P)
+
+            q -= sum_k
+
+            for s in 1:nb_state
+                new_product_state[round(Int,nb_state*q + s)] += last_product_state[product_state]*new_x[s]
+            end
+
+            new_cost += last_product_state[product_state]*cost_state
+
+        end
+
+        #@assert(sum(new_product_state) <= 1 + 10e-3)
+        #@assert(sum(new_product_state) >= 1 - 10e-3)
         
-        append!(state_list, new_states)
+        total_cost += new_cost
+        last_product_state = new_product_state
 
     end
 
-    return state_list
+    return total_cost
 
 end
 
 
-#script
 
-#parameters
+function simulate(Policies_m,Policies_k,h,nb_state, years,Q, d, P)
 
-Q = 12 # quota of free maintenance days for each year 
+    list_cost = []
 
-S = 3
+    nb_scen = size(h, 2)
 
-# random production scenario used for testing 
-colonnes_neg1 = fill(-1, S, 2)  # 2 months of 30 days
+    for scen in 1:nb_scen 
+        new_cost = simulate_concession_period(Policies_m, Policies_k, h[:,scen,:], nb_state, years, Q, d, P)
+        push!(list_cost, new_cost)
+    end
 
-#random wave height, accessible with proba 0.9
-dist = Bernoulli(0.9)
-h_month = [Int(rand(dist)) for s in 1:S, t in 1:60]
-h_month = hcat(h_month, colonnes_neg1)
+    return mean(list_cost)
 
-years = 1
+end
 
-#h = Array{Float64}(undef, 6*years, S, 62)
-#for t in 1:(6*years)
-#    h[t,:,:] = h_month
-#end
 
-#product = Array{Float64}(undef, 6*years, S, 62)
-#for t in 1:(6*years)
-#    product[t,:,:] = product_month
-#end
+function reduce_array(A::Array{T,3}, l::Int) where T
+    n, m, k = size(A)
+    @assert l ≤ m "l doit être inférieur ou égal à m"
+
+    # Tirer au hasard l indices uniques parmi 1:m
+    selected_cols = sort(sample(1:m, l; replace=false))
+
+    # Extraire les colonnes sélectionnées
+    A_reduced = A[:, selected_cols, :]
+
+    return A_reduced
+end
+
 
 
 #Vals_all, Policies_m, Policies_k = Bellman(years,Q,S,h,nb_state,P)
