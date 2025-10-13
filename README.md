@@ -1,2 +1,2 @@
 # MultiHorizonMaintenanceModel
-This is the model that we use for the PSCC article.
+A Markov Decision Process to model weather dependant maintenance of offshore electrical substations.
