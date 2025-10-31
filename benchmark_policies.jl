@@ -54,7 +54,7 @@ function π_learning(x0,k0,t,h,file_name_policies,δ,p,pr,n,d,P_daily)
 
     y = CO_layer(θ; x, k, L, Q)
 
-    κ_opt = sum([κ*y[(l-1)*(Q+1) + κ] for l in 1:L, κ in 1:(Q+1)])
+    κ_opt = sum([(κ-1)*y[(l-1)*(Q+1) + κ] for l in 1:L, κ in 1:(Q+1)])
     κ_opt = Int(round(κ_opt))
 
     l_opt = sum([length_m[l]*y[(l-1)*(Q+1) + κ] for l in 1:L, κ in 1:(Q+1)])
