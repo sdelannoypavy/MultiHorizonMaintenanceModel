@@ -1,43 +1,18 @@
-include("build_MC_converter.jl")
-include("build_MC_cooling.jl")
-include("utils_transition_probabilities.jl")
 include("get_scenarios.jl")
 include("create_scenarios_prod.jl")
+
 
 using JLD2
 
 #Parameters
 
-Q = 6
-T = 6
 h_no_w =  ones(Int, 180, 1, 62)
 h_optim = h # change for h_no_w to optimize without weather scenarios
 
 t_start = 1
-Tmax_computeδ = T+6
+margin = 30
 
-#components: converter, water circuit, fans, pumps, transformer, cooling, busbar
-C = 7
-n = [12, 3, 8, 3, 3, 3, 3]
-d = [6, 1, 1, 2, 1, 1, 1] 
-
-length_m = sort(unique(d))
-insert!(length_m, 1, 0)
-nb_time = length(length_m)
-
-#initial state
-x0 = [3 for c in 1:C]
-k0 = Q
-
-n_max = maximum(n) #we can create arrays with irregular size
-
-P_evac = [100.0 for c in 1:C, x in 1:n_max]
-for c in 1:C
-    for x in n[c]:n_max
-        P_evac[c,x] = 0.0
-    end
-end
-
+tol = 1e-10
 
 function create_schedule_m(m,t_start,T_per)
 
@@ -65,15 +40,6 @@ function create_schedule_κ(κ,t_start,T_per)
 
 end
 
-P_evac[3,1:8] = [100.0, 100.0, 100.0, 80.0, 60.0, 40.0, 20.0, 0.0] #linear decrease for the fan
-
-function Capacity(state_list,n,C,P_evac,q)
-    if sum(q[c] for c in 1:C) >= 1 #at least one ongoing maintenance
-        return 0
-    else 
-        return minimum([P_evac[c,state_list[c]] for c in 1:C])
-    end
-end
 
 """
 ---------------------------------------------------------------------------------------------
@@ -81,62 +47,53 @@ Transition probabilities
 ---------------------------------------------------------------------------------------------
 """
 
-p = [0.0 for c in 1:C, x in 1:n_max, k in 0:Q, x′ in 1:n_max, k′ in 0:Q, m in 1:nb_time, κ in 0:Q, t in 1:Tmax_computeδ]
+function create_p(C,T,n,P_period,p_file)
+    Tmax_computeδ = T+6
+    p = [0.0 for c in 1:C, x in 1:n_max, k in 0:Q, x′ in 1:n_max, k′ in 0:Q, m in 1:nb_time, κ in 0:Q, t in 1:Tmax_computeδ]
 
-#transition probabilities for 2 months 
+    #transition probabilities for 2 months 
 
 
-P_converter = build_P_converter(true_MTBF_converter,12)[:, :, 2]
-
-MTBF_trans = 2222 
-MTBF_cool = 122 
-MTBF_bus = 4762 
-
-P_trans = build_P_linear_daily(n[5], MTBF_trans)
-P_cool = build_P_linear_daily(n[6], MTBF_cool)
-P_bus = build_P_linear_daily(n[7], MTBF_bus)
-
-P_daily = [P_converter,P_water,P_fan,P_pump,P_trans,P_cool,P_bus]
-P_period = [P_converter^60,P_water^60,P_fan^60,P_pump^60,P_trans^60,P_cool^60,P_bus^60]
-
-for c in 1:C
-    for t in 1:Tmax_computeδ
-        for k in 0:Q
-            for x in 1:n[c]
-                for κ in 0:k
-                    for m in 1:nb_time
-                        if length_m[m] >= d[c]
-                            if (t % 6 == 0) #end of the year
-                                p[c,x,k+1,1,Q + 1,m,κ + 1,t] = 1.0 #maintenance
-                            else
-                                p[c,x,k+1,1,k - κ + 1,m,κ + 1,t] = 1.0
-                            end
-                        else
-                            for x′ in 1:n[c] 
+    for c in 1:C
+        for t in 1:Tmax_computeδ
+            for k in 0:Q
+                for x in 1:n[c]
+                    for κ in 0:k
+                        for m in 1:nb_time
+                            if length_m[m] >= d[c]
                                 if (t % 6 == 0) #end of the year
-                                    p[c,x,k+1,x′,Q + 1,m,κ + 1,t] = P_period[c][x′,x] #no maintenance
+                                    p[c,x,k+1,1,Q + 1,m,κ + 1,t] = 1.0 #maintenance
                                 else
-                                    p[c,x,k+1,x′,k - κ + 1,m,κ + 1,t] = P_period[c][x′,x]
+                                    p[c,x,k+1,1,k - κ + 1,m,κ + 1,t] = 1.0
+                                end
+                            else
+                                for x′ in 1:n[c] 
+                                    if (t % 6 == 0) #end of the year
+                                        p[c,x,k+1,x′,Q + 1,m,κ + 1,t] = P_period[c][x′,x] #no maintenance
+                                    else
+                                        p[c,x,k+1,x′,k - κ + 1,m,κ + 1,t] = P_period[c][x′,x]
+                                    end
                                 end
                             end
                         end
-                    end
 
-                end     
-            end
-        end   
+                    end     
+                end
+            end   
+        end
     end
-end
 
-tol = 1e-10 #replace very small coefficients by 0 to help the solver
+    tol = 1e-10 #replace very small coefficients by 0 to help the solver
 
-for i in eachindex(p)
-    if abs(p[i]) <tol
-        p[i] = 0.0
+    for i in eachindex(p)
+        if abs(p[i]) <tol
+            p[i] = 0.0
+        end
     end
-end
 
-@save "p.jld2" p
+    @save p_file p
+
+end
 
 """
 ---------------------------------------------------------------------------------------------
@@ -144,7 +101,7 @@ Costs
 ---------------------------------------------------------------------------------------------
 """
 
-function average_period_cost(T,Policies_m_t,Policies_κ_t,state,h,pr,nb_state,d,P,P_evac)
+function average_period_cost(T,Policies_m_t,Policies_κ_t,state,h_t,pr,nb_state,d,P,P_evac)
 
     # simulate states only over a strategic period for one failure scenario, weather scenario given by h, starting from state
 
@@ -157,7 +114,7 @@ function average_period_cost(T,Policies_m_t,Policies_κ_t,state,h,pr,nb_state,d,
     last_state = zeros(nb_state)
     last_state[state] = 1.0
 
-    if (q[1]>0)&&(h[1]==1)
+    if (q[1]>0)&&(h_t[1]==1)
         u[1] = 1
     end
 
@@ -179,7 +136,7 @@ function average_period_cost(T,Policies_m_t,Policies_κ_t,state,h,pr,nb_state,d,
         end
 
         q[t+1] = q[t] - u[t] + d*round(Int,Policies_m_t[t+1])
-        if (q[t+1]>0)&&(h[t+1]==1)
+        if (q[t+1]>0)&&(h_t[t+1]==1)
             u[t+1] = 1
         end
 
@@ -198,52 +155,56 @@ function average_period_cost(T,Policies_m_t,Policies_κ_t,state,h,pr,nb_state,d,
 end 
 
 
+function create_δ(C,h_optim,pr,n,d,T,P_daily,delta_file,nb_time,P_evac)
+    Tmax_computeδ = T+6
 
+    n_max = maximum(n)
 
-δ = [0.0 for c in 1:C, x in 1:n_max, m in 1:nb_time, κ in 0:Q, t in 1:Tmax_computeδ]
+    δ = [0.0 for c in 1:C, x in 1:n_max, m in 1:nb_time, κ in 0:Q, t in 1:Tmax_computeδ]
 
-nb_scen = size(h_optim, 2)
+    nb_scen = size(h_optim, 2)
 
-for c in 1:C
-    for x in 1:n[c]
-        for m_global in 1:nb_time
-            for κ in 0:Q
-                for t in 1:Tmax_computeδ
+    for c in 1:C
+        for x in 1:n[c]
+            for m_global in 1:nb_time
+                for κ in 0:Q
+                    for t in 1:Tmax_computeδ
 
-                    T_per = 62 - count(==( -1 ), h[t,1,:]) 
+                        T_per = 62 - count(==( -1 ), h_optim[t,1,:]) 
 
-                    if length_m[m_global] >= d[c]
-                        m = 1
-                    else
-                        m = 0
+                        if length_m[m_global] >= d[c]
+                            m = 1
+                        else
+                            m = 0
+                        end
+
+                        local Policies_m_t = create_schedule_m(m,t_start,T_per)
+                        local Policies_κ_t = create_schedule_κ(κ,t_start,T_per)
+
+                        local cost = 0.0
+                        
+                        for scen in 1:nb_scen #average on weather scenarios
+
+                            local h_t = h_optim[t,scen,:]
+                            local pr_t = pr[t,:]
+                            cost += (1/nb_scen) * average_period_cost(T_per,Policies_m_t,Policies_κ_t,x,h_t,pr_t,n[c],d[c],P_daily[c],P_evac[c,:])
+
+                        end
+
+                        δ[c,x,m_global,κ+1,t] = cost
+
                     end
-
-                    local Policies_m_t = create_schedule_m(m,t_start,T_per)
-                    local Policies_κ_t = create_schedule_κ(κ,t_start,T_per)
-
-                    local cost = 0.0
-                    
-                    for scen in 1:nb_scen #average on weather scenarios
-
-                        local h_t = h_optim[t,scen,:]
-                        local pr_t = pr[t,:]
-                        cost += (1/nb_scen) * average_period_cost(T_per,Policies_m_t,Policies_κ_t,x,h_t,pr_t,n[c],d[c],P_daily[c],P_evac[c,:])
-
-                    end
-
-                    δ[c,x,m_global,κ+1,t] = cost
-
                 end
             end
         end
     end
-end
 
-for i in eachindex(δ)
-    if abs(δ[i]) <tol
-        δ[i] = 0.0
+    for i in eachindex(δ)
+        if abs(δ[i]) <tol
+            δ[i] = 0.0
+        end
     end
+
+    @save delta_file δ
+
 end
-
-
-@save "delta.jld2" δ

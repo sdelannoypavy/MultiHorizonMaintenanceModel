@@ -1,10 +1,10 @@
 include("parameters_weakly_coupled.jl")
 include("weakly_coupled.jl")
+include("benchmark_policies.jl")
+
+using StatsPlots, CSV, StatsBase
 
 cache = Dict{Tuple{Tuple{Vararg{Int64}}, Int64, Int64}, Tuple{Vector{Int64}, Int64}}()
-
-file_name_simu = "simulation.csv"
-
 
 function simulate_period(Policies_m_t_list,Policies_κ_t,last_state,h,pr,n,d,P_daily)
 
@@ -20,13 +20,13 @@ function simulate_period(Policies_m_t_list,Policies_κ_t,last_state,h,pr,n,d,P_d
         end
 
         for c in 1:C
-            if (q[1,c]>0)&&(h[1]==1)
-                u[1,c] = 1
+            if (q[c,1]>0)&&(h[1]==1)
+                u[c,1] = 1
             end
         end
     
         costs = []
-        new_cost = (1 - Policies_κ_t[1]) * max(pr[1] - Capacity(last_state,n,C,P_evac,q), 0)
+        new_cost = (1 - Policies_κ_t[1]) * max(pr[1] - Capacity(last_state,n,C,P_evac,q[:,1]), 0)
 
         push!(costs, new_cost)
     
@@ -37,7 +37,7 @@ function simulate_period(Policies_m_t_list,Policies_κ_t,last_state,h,pr,n,d,P_d
             for c in 1:C
                 if u[c,t] == 0 #no maintenance
                     probas = P_daily[c][:, last_state[c]]  
-                    new_state[c] = sample(1:nb_state, Weights(probas))     
+                    new_state[c] = sample(1:n[c], Weights(probas))     
                 else       
                     new_state[c] = 1
                 end
@@ -50,17 +50,17 @@ function simulate_period(Policies_m_t_list,Policies_κ_t,last_state,h,pr,n,d,P_d
                     u[c,t+1] = 1
                 end
             end
-    
-            new_cost = (1 - Policies_κ_t[t+1]) * max(pr[t] - Capacity(new_state,n,C,P_evac,q),0)
+
+            new_cost = (1 - Policies_κ_t[t+1]) * max(pr[t+1] - Capacity(new_state,n,C,P_evac,q[:,t+1]),0)
     
             last_state = new_state
             push!(costs, new_cost)
         end
     
         for c in 1:C
-            if u[c,T] == 0 #no maintenance
+            if u[c,T_per] == 0 #no maintenance
                 probas = P_daily[c][:, last_state[c]]   
-                last_state[c] = sample(1:nb_state, Weights(probas))     
+                last_state[c] = sample(1:n[c], Weights(probas))     
             else       
                 last_state[c] = 1
             end
@@ -71,7 +71,7 @@ function simulate_period(Policies_m_t_list,Policies_κ_t,last_state,h,pr,n,d,P_d
 end 
 
 
-function simulate_concession_period(h, pr, C, n, years, Q, d, P_daily,file_name_simu,file_name_policies)
+function simulate_concession_period(H,h_sim, pr, n, years, Q, d, P_daily,file_name_simu,file_name_policies,method,δ,p,display::Bool, C)
 
     # simulate stationary policies
 
@@ -85,14 +85,24 @@ function simulate_concession_period(h, pr, C, n, years, Q, d, P_daily,file_name_
 
     for t in 1:(6*years)
 
+        if display
+            println("Simulating cost for t = ",t," with state = ",last_state," and k = ", k)
+        end
 
-        println("Simulating cost for t = ",t," with state = ",last_state," and k = ", k)
-        Policies_m_t_list, Policies_κ_t = π(last_state,k,t,h[t,:],file_name_policies)
+        if (method == "fluid") || (method == "fluid_no_w")
+            Policies_m_t_list, Policies_κ_t = π(H, last_state, k, t, h_sim[t,:], file_name_policies, δ, p, pr, n, d, P_daily)
+        elseif method == "benchmark1"
+            Policies_m_t_list, Policies_κ_t = π_benchmark1(last_state,k,t)
+        elseif method == "bellman"
+            Policies_m_t_list, Policies_κ_t = π_bellman(last_state,k,t)
+        else method == "learning"
+            Policies_m_t_list, Policies_κ_t = π_learning(last_state,k,t,h_sim[t,:],file_name_policies,δ,p,pr,n,d,P_daily)
+        end
 
         m_opti = [sum(Policies_m_t_list[c]) for c in 1:C]
         κ_opti = sum(Policies_κ_t) 
 
-        new_cost, new_state = simulate_period(Policies_m_t_list,Policies_κ_t,last_state,h[t,:],pr[t,:],n,d,P_daily)
+        new_cost, new_state = simulate_period(Policies_m_t_list,Policies_κ_t,last_state,h_sim[t,:],pr[t,:],n,d,P_daily)
 
         row = DataFrame(reshape([last_state; k; t; m_opti; κ_opti; new_cost], 1, :), :auto) 
         CSV.write(file_name_simu, row; append=true, writeheader=false) 
@@ -114,25 +124,37 @@ end
 
 
 
-function simulate(h,pr,n,years,Q,d,P_daily,nb_sim_per_weather_scen,file_name_simu,file_name_policies)
+function simulate(nb_w,nb_d,H,h,pr,n,years,Q,d,P_daily,file_name_simu,file_name_policies,method,δ,p,cost_file,display::Bool,C)
 
-    list_cost = []
+    for scen_w in 1:nb_w
 
-    nb_scen = size(h, 2)
+        cost_mean = 0
 
-    for scen in 1:nb_scen 
-        for sim in 1:nb_sim_per_weather_scen
-            # do several simulations per weather scenario 
-            new_cost = simulate_concession_period(h[:,scen,:], pr, C, n, years, Q, d, P_daily,file_name_simu,file_name_policies)
-            push!(list_cost, new_cost)
+        h_sim = [0 for T in 1:180, t in 1:62]
+
+        for T in 1:180
+            s = rand(1:80)
+            h_sim[T,:] = h[T,s,:]
         end
+
+        for _ in 1:nb_d
+            new_cost = simulate_concession_period(H,h_sim, pr, n, years, Q, d, P_daily, file_name_simu, file_name_policies, method, δ, p, display, C)
+            cost_mean += new_cost
+
+            row = DataFrame(reshape([method; new_cost], 1, :), :auto) 
+        end
+
+        cost_mean = cost_mean/nb_d
+
+        row = DataFrame(reshape([method; cost_mean], 1, :), :auto) 
+        CSV.write(cost_file, row; append=true, writeheader=false) 
+
     end
 
-    return mean(list_cost)
 
 end
 
-function collect_policies(file_name)
+function collect_policies(file_name, C::Int64)
 
     df = CSV.read(file_name, DataFrame)
 
