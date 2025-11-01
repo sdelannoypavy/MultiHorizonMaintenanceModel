@@ -152,12 +152,13 @@ function CO_layer(θ; x, k, L, Q)
     push!(y, value(k_end))
 
     @assert length(y) == learning_dim
-    dot_val = dot(θ,y)
+    #dot_val = dot(θ,y)
     #println("computed dot :$dot_val")
 
     return(y)
 
 end
+
 
 
 
