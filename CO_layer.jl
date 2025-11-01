@@ -106,10 +106,10 @@ function CO_layer(θ; x, k, L, Q)
     set_optimizer_attribute(model, "msg_lev", 0)  
     
     @variable(model, δ[1:L, 0:k], Bin)
-    @variable(model, x_end[c=1:C, x=1:n[c]] >= 0)
+    @variable(model, 0<=x_end[c=1:C, x=1:n[c]] <= 1)
     @variable(model, m[c=1:C], Bin)
-    @variable(model, k_end >= 0)
-    @variable(model, leng >= 0)
+    @variable(model, 0<= k_end <= Q)
+    @variable(model, 0<= leng <= 10)
 
     @constraint(model, sum(δ[l, κ] for l in 1:L, κ in 0:k) == 1)
 
@@ -158,6 +158,7 @@ function CO_layer(θ; x, k, L, Q)
     return(y)
 
 end
+
 
 
 
