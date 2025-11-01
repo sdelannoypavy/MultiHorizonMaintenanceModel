@@ -154,7 +154,7 @@ function main(K_mult = 100,lr_start = 1.0,ε = 10.0,Nb_epochs = 3,training_data_
         
         θ_start = period_cost_vector(x,L,C,H)
         # negative because maximization problem
-        θ = [-K_mult*θ_start;-K_mult*output]
+        θ = [-θ_start;-K_mult*output]
         @assert length(θ) == learning_dim
         
         l += loss(θ, y; x, k, L, Q)
@@ -219,13 +219,13 @@ function train_model(
         θ_start = period_cost_vector(x,L,C,H)
 
         output = model(input)
-        θ = [-K_mult*θ_start;-K_mult*output]
+        θ = [-θ_start;-K_mult*output]
         #dot_val = dot(θ,y)
         #println("true dot: $dot_val")
 
         grads = Flux.gradient(model) do m
             output = m(input)
-            θ = [-K_mult*θ_start;-K_mult*output]
+            θ = [-θ_start;-K_mult*output]
             l += loss(θ, y; x, k, L, Q)        
         end
         Flux.update!(opt_state, model, grads[1])
@@ -310,6 +310,7 @@ end
 
 # faire un push pour préciser le model
 # main(100,1.0,10.0,3,50)
+
 
 
 
