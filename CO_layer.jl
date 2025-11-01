@@ -1,4 +1,4 @@
-C = 1
+C = 7
 learning_dim = (Q+1)*L + C + 1
 
 function period_cost_vector(x,L,C,H)
@@ -158,6 +158,7 @@ function CO_layer(θ; x, k, L, Q)
     return(y)
 
 end
+
 
 
 
