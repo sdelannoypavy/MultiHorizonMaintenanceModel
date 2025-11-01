@@ -265,6 +265,7 @@ function create_data(training_data_nb)
 
 end
 
+#=
 function testing()
     nb_w = 5000
     nb_d = 1
@@ -292,6 +293,7 @@ function testing()
     simulate(nb_w,nb_d,H,h,pr,n,years,Q,d,P_daily67,"simulationl67.csv","policies_l.csv","learning",δ67,p67,"costl67.csv",false,C)
 
 end
+=#
 
 model = main()
 @save "model.jld2" model
@@ -305,4 +307,5 @@ model = main()
 
 
 #loss doesnt converge to 0 with dataset of size 1: bug? 
+
 
