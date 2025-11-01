@@ -109,6 +109,8 @@ function main(K_mult = 100,lr_start = 1.0,ε = 10.0,Nb_epochs = 3,training_data_
 
     # Hyperparameters
     nb_samples = 20 # number of perturbed samples
+
+    println("Nb of training epochs: ", Nb_epochs)
     
 
     C = 7
@@ -309,6 +311,7 @@ end
 
 # faire un push pour préciser le model
 # main(100,1.0,10.0,3,50)
+
 
 
 
