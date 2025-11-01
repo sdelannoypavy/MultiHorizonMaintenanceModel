@@ -295,7 +295,7 @@ end
 
 model = main()
 @save "model.jld2" model
-testing()
+#testing()
 
 # training is not right because the objective is not linear in maintenance schedule. 
 # the CO layer should ouput the expectation of states and k_end
@@ -305,3 +305,4 @@ testing()
 
 
 #loss doesnt converge to 0 with dataset of size 1: bug? 
+
