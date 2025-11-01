@@ -1,5 +1,5 @@
 include("parameters_weakly_coupled.jl")
-include("weakly_coupled.jl")
+#include("weakly_coupled.jl")
 include("benchmark_policies.jl")
 
 using StatsPlots, CSV, StatsBase
@@ -174,3 +174,4 @@ function collect_policies(file_name, C::Int64)
     end
 
 end
+
