@@ -50,7 +50,7 @@ function π_learning(x0,k0,t,h,file_name_policies,δ,p,pr,n,d,P_daily)
 
     output = model([x0; k0; t0])
     θ_start = period_cost_vector(x,L,C,H)
-    θ = [-K_mult*θ_start;-K_mult*output]
+    θ = [-θ_start;-K_mult*output]
 
     y = CO_layer(θ; x, k, L, Q)
 
@@ -113,5 +113,6 @@ function π_learning(x0,k0,t,h,file_name_policies,δ,p,pr,n,d,P_daily)
 
         return Policies_m_t_list_min, Policies_κ_t_min
     end
+
 
 end
