@@ -182,7 +182,7 @@ function main(K_mult = 100,lr_start = 1.0,ε = 10.0,Nb_epochs = 3,training_data_
     plot(x,loss_list)
 
     model = main()
-    @save "model_K$(K_mult)_lr$(lr_start)_ε$(ε),Nb_epochs_(Nb_epochs),training_data_nb$(training_data_nb).jld2" model
+    @save "model_K$(K_mult)_lr$(lr_start)_ε$(ε),Nb_epochs_$(Nb_epochs),training_data_nb$(training_data_nb).jld2" model
 
     savefig("learning.pdf")
 
@@ -307,6 +307,7 @@ end
 
 # faire un push pour préciser le model
 # main(100,1.0,10.0,3,50)
+
 
 
 
