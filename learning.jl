@@ -219,7 +219,7 @@ function train_model(
 
         output = model(input)
         θ = [-K_mult*θ_start;-K_mult*output]
-        dot_val = dot(θ,y)
+        #dot_val = dot(θ,y)
         #println("true dot: $dot_val")
 
         grads = Flux.gradient(model) do m
@@ -307,6 +307,7 @@ model = main()
 
 
 #loss doesnt converge to 0 with dataset of size 1: bug? 
+
 
 
 
