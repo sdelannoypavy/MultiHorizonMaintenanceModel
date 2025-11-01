@@ -98,8 +98,11 @@ function CO_layer(θ; x, k, L, Q)
 
     c = [θ[(Q+1)*(l-1) + κ] for l in 1:L, κ in 1:(k+1)]
     
-    model = Model(() -> Gurobi.Optimizer(GRB_ENV))
-    set_optimizer_attribute(model, "OutputFlag", 0)
+    #model = Model(() -> Gurobi.Optimizer(GRB_ENV))
+    #set_optimizer_attribute(model, "OutputFlag", 0)
+
+    model = Model(GLPK.Optimizer)
+    set_optimizer_attribute(model, "msg_lev", 0)  
     
     @variable(model, δ[1:L, 0:k], Bin)
     @variable(model, x_end[c=1:C, x=1:n[c]] >= 0)
@@ -154,4 +157,5 @@ function CO_layer(θ; x, k, L, Q)
     return(y)
 
 end
+
 
