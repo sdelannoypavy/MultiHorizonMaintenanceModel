@@ -110,11 +110,11 @@ P_period99 = [P_conv^60,P_water99^60,P_fan^60,P_pump^60,P_trans^60,P_cool^60,P_b
 function main()
 
     # Hyperparameters
-    lr_start = 0.001
+    lr_start = 1.0
     nb_samples = 20 # number of perturbed samples
     ε = 10.0  # scale of the perturbation
-    Nb_epochs = 1
-    training_data_nb = 1
+    Nb_epochs = 3
+    training_data_nb = 50
 
     C = 7
     L = 4 
@@ -307,6 +307,7 @@ model = main()
 
 
 #loss doesnt converge to 0 with dataset of size 1: bug? 
+
 
 
 
