@@ -113,8 +113,8 @@ function main()
     lr_start = 0.001
     nb_samples = 20 # number of perturbed samples
     ε = 10.0  # scale of the perturbation
-    Nb_epochs = 10
-    training_data_nb = 500
+    Nb_epochs = 1
+    training_data_nb = 1
 
     C = 7
     L = 4 
@@ -307,5 +307,6 @@ model = main()
 
 
 #loss doesnt converge to 0 with dataset of size 1: bug? 
+
 
 
