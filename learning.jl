@@ -169,7 +169,8 @@ function main(K_mult = 100,lr_start = 1.0,ε = 10.0,Nb_epochs = 3,training_data_
         loss,
         L,
         Q,
-        nb_scen
+        nb_scen,
+        K_mult
     )
         push!(loss_list, l)
 
@@ -197,7 +198,8 @@ function train_model(
     loss,
     L,
     Q,
-    nb_scen
+    nb_scen,
+    K_mult
 )
     
     opt_state = Flux.setup(opt, model)
@@ -307,6 +309,7 @@ end
 
 # faire un push pour préciser le model
 # main(100,1.0,10.0,3,50)
+
 
 
 
