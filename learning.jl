@@ -20,8 +20,6 @@ using DataFrames
 L= 4
 Q = 6
 nb_scen = 80
-
-K_mult = 100
     
 
 include("CO_layer.jl")
@@ -107,14 +105,11 @@ P_period99 = [P_conv^60,P_water99^60,P_fan^60,P_pump^60,P_trans^60,P_cool^60,P_b
 
 
 
-function main()
+function main(K_mult = 100,lr_start = 1.0,ε = 10.0,Nb_epochs = 3,training_data_nb = 50)
 
     # Hyperparameters
-    lr_start = 1.0
     nb_samples = 20 # number of perturbed samples
-    ε = 10.0  # scale of the perturbation
-    Nb_epochs = 3
-    training_data_nb = 50
+    
 
     C = 7
     L = 4 
@@ -185,6 +180,9 @@ function main()
 
     x = 0:Nb_epochs
     plot(x,loss_list)
+
+    model = main()
+    @save "model_K$(K_mult)_lr$(lr_start)_ε$(ε),Nb_epochs_(Nb_epochs),training_data_nb$(training_data_nb).jld2" model
 
     savefig("learning.pdf")
 
@@ -295,8 +293,7 @@ function testing()
 end
 =#
 
-model = main()
-@save "model.jld2" model
+
 #testing()
 
 # training is not right because the objective is not linear in maintenance schedule. 
@@ -307,6 +304,9 @@ model = main()
 
 
 #loss doesnt converge to 0 with dataset of size 1: bug? 
+
+# faire un push pour préciser le model
+# main(100,1.0,10.0,3,50)
 
 
 
