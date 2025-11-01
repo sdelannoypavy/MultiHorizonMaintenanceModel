@@ -13,7 +13,8 @@ using Revise
 using CSV
 using JLD2
 using JuMP
-using Gurobi
+#using Gurobi
+using GLPK
 using DataFrames
 
 L= 4
@@ -301,5 +302,6 @@ testing()
 # but still it is not additive in theta because we have the cost over scheduling stage 
 # so theta should include some components that are not outputed by nn ? 
 # the global objective is linear. 
+
 
 #loss doesnt converge to 0 with dataset of size 1: bug? 
