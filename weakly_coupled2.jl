@@ -7,7 +7,7 @@ using CSV
 using DataFrames
 
 
-include("parameters_weakly_coupled.jl")
+include("parameters_weakly_coupled2.jl")
 
 const GRB_ENV = Gurobi.Env()
 optimizer=() -> Gurobi.Optimizer(GRB_ENV)
@@ -102,25 +102,38 @@ function PLNE(H,C,x0,k0,t0,δ,p,n)
     #set_optimizer_attribute(model, "OutputFlag", 0)
 
 
-    @variable(model, q[c = 1:C, x = 1:n[c], k = 0:Q, m = 1:nb_time, κ = 0:Q, t = t0:Tmax] >= 0)     
-    @variable(model, A[κ = 0:Q, m = 1:nb_time, t = t0:Tmax] >= 0)   
-    @variable(model, μ[k = 0:Q, t = t0:Tmax] >= 0)  
+    @variable(model, q[c = 1:C, x = 1:n[c], k = 0:Q, m = 0:1, κ = 0:Q, t = t0:Tmax] >= 0)     
+    @variable(model, A[κ = 0:Q, m in 1:nb_time, t = t0:Tmax] >= 0)   
+    @variable(model, μ[m = 1:nb_time, t = t0:Tmax] >= 0)  
 
     M = 100.0
 
-    @objective(model, Min, M*sum(δ[c,x,m,κ+1,t]*q[c,x,k,m,κ,t] for c in 1:C, x in 1:n[c], k in 0:Q, m in 1:nb_time, κ in 0:Q, t in t0:Tmax))
+    @objective(model, Min, M*sum(δ[c,x,m+1,κ+1,t]*q[c,x,k,m,κ,t] for c in 1:C, x in 1:n[c], k in 0:Q, m in 0:1, κ in 0:Q, t in t0:Tmax))
 
     # do we really want one vector of probability transitions for each t?
-    @constraint(model, [c = 1:C, t = (t0+1):Tmax, x = 1:n[c], k = 0:Q], sum(q[c,x,k,m,κ,t] for m in 1:nb_time, κ in 0:Q) 
-        >= sum(p[c,x′,k′+1,x,k+1,m,κ+1,t-1]*q[c,x′,k′,m,κ,t-1] for x′ in 1:n[c], k′ in 0:Q, m in 1:nb_time, κ in 0:Q))
+    @constraint(model, [c = 1:C, t = (t0+1):Tmax, x = 1:n[c], k = 0:Q], sum(q[c,x,k,m,κ,t] for m in 0:1, κ in 0:Q) 
+        >= sum(p[c,x′,k′+1,x,k+1,m+1,κ+1,t-1]*q[c,x′,k′,m,κ,t-1] for x′ in 1:n[c], k′ in 0:Q, m in 0:1, κ in 0:Q))
 
-    @constraint(model, [c = 1:C, m = 1:nb_time, κ = 0:Q, t = t0:Tmax], sum(q[c,x,k,m,κ,t] for x in 1:n[c], k in 0:Q) == A[κ,m,t])
+    # ensure that if we do a maintenance we also do all shorter maintenances
+    is_shorter = zeros(C, 4)
+    for c in 1:C
+        for l in 1:L
+            if d[c] <= length_m[l]
+                is_shorter[c,l] = 1
+            end
+        end
+    end
 
-    @constraint(model, [c = 1:C, x = 1:n[c], k = 0:Q], sum(q[c,x,k,m,κ,t0] for m in 1:nb_time, κ in 0:Q) == α[c,x,k+1])
+    # add sum probas equal 0? 
 
-    @constraint(model, [c = 1:C, x = 1:n[c], k = 0:(Q-1), m = 1:nb_time, κ = (k+1):Q, t = t0:Tmax], q[c,x,k,m,κ,t] == 0)
+    for c in 1:C
+        @constraint(model, [κ = 0:Q, t = t0:Tmax], sum(q[c,x,k,1,κ,t] for x in 1:n[c], k in 0:Q) == sum(is_shorter[c,m]*A[κ,m,t] for m in 1:4))
+        @constraint(model, [κ = 0:Q, t = t0:Tmax], sum(q[c,x,k,0,κ,t] for x in 1:n[c], k in 0:Q) == sum((1-is_shorter[c,m])*A[κ,m,t] for m in 1:4))
+    end
 
-    @constraint(model, [c = 1:C, k = 0:Q, t = t0:Tmax], sum(q[c,x,k,m,κ,t] for x in 1:n[c], m in 1:nb_time, κ in 0:Q) == μ[k,t])
+    @constraint(model, [c = 1:C, x = 1:n[c], k = 0:Q], sum(q[c,x,k,m,κ,t0] for m in 0:1, κ in 0:Q) == α[c,x,k+1])
+
+    @constraint(model, [c = 1:C, x = 1:n[c], k = 0:(Q-1), m = 0:1, κ = (k+1):Q, t = t0:Tmax], q[c,x,k,m,κ,t] == 0)
 
 
     """
@@ -135,8 +148,8 @@ function PLNE(H,C,x0,k0,t0,δ,p,n)
     cost = JuMP.objective_value(model)
 
     κ_opt = argmax([sum(value(A[κ,m,t0]) for m in 1:nb_time) for κ in 0:Q]) - 1
-    m_l = argmax([sum(value(A[κ,m,t0]) for κ in 0:Q) for m in 1:nb_time]) 
-    m_opt = [(d[c] <= length_m[m_l]) ? 1 : 0 for c in 1:C]
+    m_opt = [argmax([sum(value(q[c,x0[c],k0,m,κ,t0]) for κ in 0:Q) for m in 0:1]) - 1 for c in 1:C]
+
 
 
     if (status == MOI.OPTIMAL) || (status == MOI.LOCALLY_SOLVED)

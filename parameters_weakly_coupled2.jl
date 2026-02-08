@@ -49,7 +49,7 @@ Transition probabilities
 
 function create_p(C,T,n,P_period,p_file)
     Tmax_computeδ = T+6
-    p = [0.0 for c in 1:C, x in 1:n_max, k in 0:Q, x′ in 1:n_max, k′ in 0:Q, m in 1:nb_time, κ in 0:Q, t in 1:Tmax_computeδ]
+    p = [0.0 for c in 1:C, x in 1:n_max, k in 0:Q, x′ in 1:n_max, k′ in 0:Q, m in 1:2, κ in 0:Q, t in 1:Tmax_computeδ]
 
     #transition probabilities for 2 months 
 
@@ -59,8 +59,8 @@ function create_p(C,T,n,P_period,p_file)
             for k in 0:Q
                 for x in 1:n[c]
                     for κ in 0:k
-                        for m in 1:nb_time
-                            if length_m[m] >= d[c]
+                        for m in 1:2
+                            if m == 2
                                 if (t % 6 == 0) #end of the year
                                     p[c,x,k+1,1,Q + 1,m,κ + 1,t] = 1.0 #maintenance
                                 else
@@ -160,23 +160,19 @@ function create_δ(C,h_optim,pr,n,d,T,P_daily,delta_file,nb_time,P_evac)
 
     n_max = maximum(n)
 
-    δ = [0.0 for c in 1:C, x in 1:n_max, m in 1:nb_time, κ in 0:Q, t in 1:Tmax_computeδ]
+    δ = [0.0 for c in 1:C, x in 1:n_max, m in 1:2, κ in 0:Q, t in 1:Tmax_computeδ]
 
     nb_scen = size(h_optim, 2)
 
     for c in 1:C
         for x in 1:n[c]
-            for m_global in 1:nb_time
+            for m_global in 1:2
                 for κ in 0:Q
                     for t in 1:Tmax_computeδ
 
                         T_per = 62 - count(==( -1 ), h_optim[t,1,:]) 
 
-                        if length_m[m_global] >= d[c]
-                            m = 1
-                        else
-                            m = 0
-                        end
+                        m = m_global - 1
 
                         local Policies_m_t = create_schedule_m(m,t_start,T_per)
                         local Policies_κ_t = create_schedule_κ(κ,t_start,T_per)

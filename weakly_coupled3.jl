@@ -90,7 +90,7 @@ function π(H,x0,k0,t,h,file_name_policies,δ,p,pr,n,d,P_daily)
 
 end
 
-
+int_m = [3,1,1,2,1,1,1]
 
 function PLNE(H,C,x0,k0,t0,δ,p,n)
 
@@ -108,7 +108,7 @@ function PLNE(H,C,x0,k0,t0,δ,p,n)
 
     M = 100.0
 
-    @objective(model, Min, M*sum(δ[c,x,m,κ+1,t]*q[c,x,k,m,κ,t] for c in 1:C, x in 1:n[c], k in 0:Q, m in 1:nb_time, κ in 0:Q, t in t0:Tmax))
+    @objective(model, Min, M*sum(δ[c,x,m,κ+1,t]*q[c,x,k,m,κ,t] for c in 1:C, x in 1:n[c], k in 0:Q, m in 1:int_m[c], κ in 0:Q, t in t0:Tmax) + sum(δ[2,1,2,κ+1,t]*A[κ,2,t] + δ[4,1,3,κ+1,t]*A[κ,3,t] + δ[1,1,4,κ+1,t]*A[κ,4,t] for κ in 0:Q, t in t0:Tmax))
 
     # do we really want one vector of probability transitions for each t?
     @constraint(model, [c = 1:C, t = (t0+1):Tmax, x = 1:n[c], k = 0:Q], sum(q[c,x,k,m,κ,t] for m in 1:nb_time, κ in 0:Q) 

@@ -36,37 +36,38 @@ function V(T,s_init,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
 
     @objective(model, Min, (alpha/S)*sum(c[t,s] for t in 1:(T+1), s in 1:S))
 
-    @constraint(model, [s in 1:S, t in 1:(T+1)], sum(x[s,t,i] for i in 1:nb_state) <= 1 + tol)
-    @constraint(model, [s in 1:S, t in 1:(T+1)], sum(x[s,t,i] for i in 1:nb_state) >= 1 - tol)
+    @constraint(model, [s = 1:S, t = 1:(T+1)], sum(x[s,t,i] for i in 1:nb_state) <= 1 + tol)
+    @constraint(model, [s = 1:S, t = 1:(T+1)], sum(x[s,t,i] for i in 1:nb_state) >= 1 - tol)
 
-    @constraint(model, [s in 1:S, t in 1:T], q[s,t] <= d*T)
+    @constraint(model, [s = 1:S, t = 1:T], q[s,t] <= d*T)
 
     margin = 30 #margin to avoid maintenance that we can't finish
     @constraint(model, [t in 1:margin], m[T+1-t] == 0) 
 
     # state dynamics
 
-    @constraint(model, [s in 1:S, t in 2:(T+1), i in 1:nb_state], !ong_m[s,t-1] --> {x[s,t,i] == sum(P[i,j,2]*x[s,t-1,j] for j in 1:nb_state)}) # no maintenance
-    @constraint(model, [s in 1:S, t in 2:(T+1), i in 1:nb_state], ong_m[s,t-1] --> {x[s,t,i] == sum(P[i,j,1]*x[s,t-1,j] for j in 1:nb_state)}) #maintenance
+    @constraint(model, [s = 1:S, t = 2:(T+1), i = 1:nb_state], !ong_m[s,t-1] --> {x[s,t,i] == sum(P[i,j]*x[s,t-1,j] for j in 1:nb_state)}) # no maintenance
+    @constraint(model, [s = 1:S, t = 2:(T+1), i = 2:nb_state], ong_m[s,t-1] --> {x[s,t,i] == 0.0}) #maintenance
+    @constraint(model, [s = 1:S, t = 2:(T+1)], ong_m[s,t-1] --> {x[s,t,1] == 1.0}) #maintenance
 
-    @constraint(model, [s in 1:S, i in 1:nb_state], x[s,1,i] == x_0[i])
+    @constraint(model, [s = 1:S, i = 1:nb_state], x[s,1,i] == x_0[i])
 
     # deterministic rule: "maintain as soon as possible"
 
-    @constraint(model, [s in 1:S, i in 1:nb_state], q[s,1] == d*m[1])
+    @constraint(model, [s = 1:S, i = 1:nb_state], q[s,1] == d*m[1])
     @constraint(model, [s in 1:S, t in 1:(T-1)], q[s,t+1] == q[s,t] - u[s,t] + d*m[t+1])
 
-    @constraint(model, [s in 1:S, t in 1:T], ong_m[s,t] --> {u[s,t] == h[s,t]})
-    @constraint(model, [s in 1:S, t in 1:T], !ong_m[s,t] --> {u[s,t] == 0})
+    @constraint(model, [s = 1:S, t = 1:T], ong_m[s,t] --> {u[s,t] == h[s,t]})
+    @constraint(model, [s = 1:S, t = 1:T], !ong_m[s,t] --> {u[s,t] == 0})
 
-    @constraint(model, [s in 1:S, t in 1:T], ong_m[s,t] >= (1/(d*T))*q[s,t])
-    @constraint(model, [s in 1:S, t in 1:T], ong_m[s,t] <= q[s,t])
+    @constraint(model, [s = 1:S, t = 1:T], ong_m[s,t] >= (1/(d*T))*q[s,t])
+    @constraint(model, [s = 1:S, t = 1:T], ong_m[s,t] <= q[s,t])
 
 
     # cost
 
-    @constraint(model, [s in 1:S, t in 1:T], !ong_m[s,t] --> {c[t,s] == sum(x[s,t,state]*(100 - P_evac[state]) for state in 1:nb_state)})
-    @constraint(model, [s in 1:S, t in 1:T], ong_m[s,t] --> {c[t,s] == (1-k[t])*100})
+    @constraint(model, [s = 1:S, t = 1:T], !ong_m[s,t] --> {c[t,s] == sum(x[s,t,state]*(100 - P_evac[state]) for state in 1:nb_state)})
+    @constraint(model, [s = 1:S, t = 1:T], ong_m[s,t] --> {c[t,s] == (1-k[t])*100})
 
 
     @constraint(model, q_f == q_i - sum(k[t] for t in 1:T)) 
@@ -96,10 +97,11 @@ function V(T,s_init,q_i,S,h,nb_state,P,Q,Vals,d,P_evac)
         else
             println("Aucune solution optimale trouvée.")
             println(status)
+            return(0,[0 for t in 1:T],[0 for t in 1:T])
         end    
     catch e
         println("Erreur pendant la résolution : ", e)
-        return(nothing,nothing,nothing)
+        return(0,[0 for t in 1:T],[0 for t in 1:T])
     end
 
 
@@ -132,6 +134,15 @@ function Bellman(years,Q,S,h,nb_state,P,d)
                 h_t = h_reduced[Tmax-t+1, :, :]  # taille (S, T)
                 T = 62 - count(==( -1 ), h_t[1,:]) # - 1 means ends of the month, so that we can represent months with variable lengths with vectors of the same dimensions
                 println(t)
+
+                if (Tmax - t + 1 % 6 == 0) #end year
+                    for q in 1:Q
+                        for state in 1:nb_sttae
+                            Vals_old[state,q] = Vals_old[state,Q+1] #quotas renewed
+                        end
+                    end
+                end
+
                 if S == 0
                     h = ones(1, T)
                     val, m_opt, k_opt = V(T,s,q,1,h,nb_state,P,Q,Vals_old,d,P_evac)
